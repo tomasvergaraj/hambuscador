@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hambuscador icon">
+  <title>Hambuscador</title>
+  <path d="M6,30 C6,14 18,6 32,6 C46,6 58,14 58,30 Z" fill="#E8A02C"/>
+  <ellipse cx="22" cy="20" rx="1.4" ry="1.9" fill="#FAF6EE"/>
+  <ellipse cx="32" cy="15" rx="1.4" ry="1.9" fill="#FAF6EE"/>
+  <ellipse cx="42" cy="20" rx="1.4" ry="1.9" fill="#FAF6EE"/>
+  <path d="M4,30 L60,30 L60,34 Q56,37 52,34 Q48,37 44,34 Q40,37 36,34 Q32,37 28,34 Q24,37 20,34 Q16,37 12,34 Q8,37 4,34 Z" fill="#6B8E4E"/>
+  <rect x="4" y="36" width="56" height="10" rx="2.5" fill="#3E2723"/>
+  <path d="M6,46 L58,46 L58,50 C58,55 46,58 32,58 C18,58 6,55 6,50 Z" fill="#C8862A"/>
+</svg>

@@ -1,0 +1,29 @@
+# ==============================================================================
+# Hambuscador — local dev database
+# ==============================================================================
+# Spin up con `pnpm db:up` (que es `docker compose up -d`).
+# La data persiste en el volumen `hambuscador_pgdata` entre restarts.
+# Para reset total: `pnpm db:reset` (compose down -v + up + push + seed).
+# ==============================================================================
+
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: hambuscador-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hambuscador
+      POSTGRES_PASSWORD: hambuscador
+      POSTGRES_DB: hambuscador
+    ports:
+      - "5432:5432"
+    volumes:
+      - hambuscador_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hambuscador -d hambuscador"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  hambuscador_pgdata:

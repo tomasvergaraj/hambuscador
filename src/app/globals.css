@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Brand tokens
+   These become Tailwind utilities automatically: bg-mostaza,
+   text-carbon, font-display, rounded-lg, etc.
+   ============================================================ */
+@theme {
+  /* Brand colors */
+  --color-crema: #f5efe6;
+  --color-crema-deep: #faf6ee;
+  --color-crema-edge: #e8ddd0;
+
+  --color-carbon: #1f1b17;
+  --color-carbon-soft: #2a2520;
+
+  --color-mostaza: #e8a02c;
+  --color-mostaza-deep: #c8862a;
+  --color-mostaza-soft: #f4c779;
+
+  --color-tomate: #c84b31;
+  --color-tomate-deep: #a53a26;
+
+  --color-lechuga: #6b8e4e;
+  --color-lechuga-deep: #547339;
+
+  --color-tinta-suave: #6e5f4f;
+  --color-bronceado: #8b7355;
+
+  /* Typography */
+  --font-display:
+    var(--font-bricolage), "Bricolage Grotesque", system-ui, sans-serif;
+  --font-body: var(--font-geist), "Geist", system-ui, sans-serif;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+}
+
+/* ============================================================
+   Base styles
+   ============================================================ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--color-crema);
+    color: var(--color-carbon);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Display font for headings */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Native input reset to support custom styling */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+@layer utilities {
+  /* Hide scrollbars but keep scrolling functional (for chip rows) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
