@@ -87,12 +87,6 @@ export default async function HomePage() {
           <h2 className="font-display font-semibold text-base text-carbon">
             trending esta semana
           </h2>
-          <Link
-            href="/picas"
-            className="text-xs text-tomate font-medium hover:opacity-80"
-          >
-            ver listas →
-          </Link>
         </div>
         <div className="grid grid-cols-1 gap-3">
           {trending.map((place) => (

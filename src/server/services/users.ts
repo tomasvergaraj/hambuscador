@@ -1,8 +1,16 @@
 import bcrypt from "bcryptjs";
-import { count, eq } from "drizzle-orm";
+import { count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
-import { favorites, places, users, type DbUser } from "@/server/db/schema";
+import {
+  favorites,
+  places,
+  reviews,
+  users,
+  type DbUser,
+  type PlaceModerationStatus,
+  type UserRole,
+} from "@/server/db/schema";
 
 // ============================================================================
 // API pública del servicio de usuarios
@@ -108,4 +116,264 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     favoriteCount: Number(favRow[0]?.count ?? 0),
     placeCount: Number(placeRow[0]?.count ?? 0),
   };
+}
+
+// ============================================================================
+// Listas de actividad para /perfil
+// ============================================================================
+
+type PlaceLink = {
+  id: string;
+  name: string;
+  slug: string;
+  comunaSlug: string;
+  comunaLabel: string;
+};
+
+export type MyReviewItem = {
+  id: string;
+  rating: number;
+  text: string | null;
+  createdAt: Date;
+  place: PlaceLink;
+};
+
+export type MyFavoriteItem = {
+  createdAt: Date;
+  place: PlaceLink & {
+    ratingAvg: string | null;
+    reviewCount: number;
+  };
+};
+
+export type MySubmissionItem = {
+  id: string;
+  name: string;
+  slug: string;
+  comunaSlug: string;
+  comunaLabel: string;
+  moderationStatus: PlaceModerationStatus;
+  createdAt: Date;
+};
+
+/**
+ * Reseñas del usuario, más recientes primero, con el local al que apuntan
+ * para poder linkear a la ficha pública.
+ */
+export async function getMyReviews(userId: string): Promise<MyReviewItem[]> {
+  if (!isDbConfigured()) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: reviews.id,
+      rating: reviews.rating,
+      text: reviews.text,
+      createdAt: reviews.createdAt,
+      placeId: places.id,
+      placeName: places.name,
+      placeSlug: places.slug,
+      placeComunaSlug: places.comunaSlug,
+      placeComunaLabel: places.comunaLabel,
+    })
+    .from(reviews)
+    .innerJoin(places, eq(places.id, reviews.placeId))
+    .where(eq(reviews.authorId, userId))
+    .orderBy(desc(reviews.createdAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    rating: r.rating,
+    text: r.text,
+    createdAt: r.createdAt,
+    place: {
+      id: r.placeId,
+      name: r.placeName,
+      slug: r.placeSlug,
+      comunaSlug: r.placeComunaSlug,
+      comunaLabel: r.placeComunaLabel,
+    },
+  }));
+}
+
+/**
+ * Favoritos del usuario, más recientes primero. Incluye rating del local
+ * para mostrar en la card.
+ */
+export async function getMyFavorites(userId: string): Promise<MyFavoriteItem[]> {
+  if (!isDbConfigured()) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      createdAt: favorites.createdAt,
+      placeId: places.id,
+      placeName: places.name,
+      placeSlug: places.slug,
+      placeComunaSlug: places.comunaSlug,
+      placeComunaLabel: places.comunaLabel,
+      ratingAvg: places.ratingAvg,
+      reviewCount: places.reviewCount,
+    })
+    .from(favorites)
+    .innerJoin(places, eq(places.id, favorites.placeId))
+    .where(eq(favorites.userId, userId))
+    .orderBy(desc(favorites.createdAt));
+
+  return rows.map((r) => ({
+    createdAt: r.createdAt,
+    place: {
+      id: r.placeId,
+      name: r.placeName,
+      slug: r.placeSlug,
+      comunaSlug: r.placeComunaSlug,
+      comunaLabel: r.placeComunaLabel,
+      ratingAvg: r.ratingAvg,
+      reviewCount: r.reviewCount,
+    },
+  }));
+}
+
+/**
+ * Locales que el usuario aportó (todos los estados de moderación).
+ */
+export async function getMySubmissions(userId: string): Promise<MySubmissionItem[]> {
+  if (!isDbConfigured()) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: places.id,
+      name: places.name,
+      slug: places.slug,
+      comunaSlug: places.comunaSlug,
+      comunaLabel: places.comunaLabel,
+      moderationStatus: places.moderationStatus,
+      createdAt: places.createdAt,
+    })
+    .from(places)
+    .where(eq(places.submittedBy, userId))
+    .orderBy(desc(places.createdAt));
+
+  return rows;
+}
+
+// ============================================================================
+// Admin / gestión de usuarios
+// ============================================================================
+
+export type AdminUserItem = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: UserRole;
+  reviewCount: number;
+  bannedAt: Date | null;
+  createdAt: Date;
+};
+
+export type UserCursor = { createdAt: string; id: string };
+export type AdminUsersPage = {
+  items: AdminUserItem[];
+  nextCursor: UserCursor | null;
+};
+
+/**
+ * Listado paginado de usuarios para /admin/usuarios. Cursor-based en
+ * (created_at desc, id desc) para escalar. `q` filtra por email/nombre.
+ */
+export async function getAdminUsers(opts?: {
+  limit?: number;
+  cursor?: UserCursor | null;
+  q?: string;
+}): Promise<AdminUsersPage> {
+  if (!isDbConfigured()) return { items: [], nextCursor: null };
+
+  const { limit = 25, cursor, q } = opts ?? {};
+  const db = getDb();
+  const lookahead = limit + 1;
+
+  const conditions: import("drizzle-orm").SQL[] = [];
+  if (cursor) {
+    conditions.push(
+      sql`(${users.createdAt}, ${users.id}) < (${new Date(cursor.createdAt)}, ${cursor.id}::uuid)`,
+    );
+  }
+  if (q && q.trim().length > 0) {
+    const like = `%${q.trim()}%`;
+    const orExpr = or(ilike(users.email, like), ilike(users.name, like));
+    if (orExpr) conditions.push(orExpr);
+  }
+
+  const where =
+    conditions.length === 0
+      ? undefined
+      : conditions.reduce<import("drizzle-orm").SQL>(
+          (acc, c) => sql`${acc} AND ${c}`,
+          sql`TRUE`,
+        );
+
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      reviewCount: users.reviewCount,
+      bannedAt: users.bannedAt,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(where)
+    .orderBy(desc(users.createdAt), desc(users.id))
+    .limit(lookahead);
+
+  const hasMore = rows.length > limit;
+  const visible = hasMore ? rows.slice(0, limit) : rows;
+  const last = visible[visible.length - 1];
+  const nextCursor: UserCursor | null =
+    hasMore && last ? { createdAt: last.createdAt.toISOString(), id: last.id } : null;
+
+  return { items: visible, nextCursor };
+}
+
+/**
+ * ¿Está baneado el usuario? Helper rápido para el flujo de auth.
+ */
+export async function isUserBanned(userId: string): Promise<boolean> {
+  if (!isDbConfigured()) return false;
+  const db = getDb();
+  const [row] = await db
+    .select({ bannedAt: users.bannedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return Boolean(row?.bannedAt);
+}
+
+export async function banUser(userId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+  const db = getDb();
+  await db
+    .update(users)
+    .set({ bannedAt: new Date(), updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function unbanUser(userId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+  const db = getDb();
+  await db
+    .update(users)
+    .set({ bannedAt: null, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function setUserRole(userId: string, role: UserRole): Promise<void> {
+  if (!isDbConfigured()) return;
+  const db = getDb();
+  await db
+    .update(users)
+    .set({ role, updatedAt: new Date() })
+    .where(eq(users.id, userId));
 }

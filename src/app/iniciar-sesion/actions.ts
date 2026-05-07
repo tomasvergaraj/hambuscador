@@ -48,7 +48,7 @@ export async function signInWithCredentials(
       if (error.type === "CredentialsSignin") {
         return { error: "Email o contraseña incorrectos" };
       }
-      return { error: "No pudimos iniciar sesión, probá de nuevo" };
+      return { error: "No pudimos iniciar sesión, intenta de nuevo" };
     }
     throw error;
   }

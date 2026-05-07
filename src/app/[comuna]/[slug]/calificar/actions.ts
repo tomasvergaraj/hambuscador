@@ -1,15 +1,20 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { auth } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
-import { createReview } from "@/server/services/reviews";
+import {
+  createReview,
+  deleteReview,
+  getMyReviewForPlace,
+  updateReview,
+} from "@/server/services/reviews";
 
 // 1..5 obligatorio (rating general)
-const ratingField = z.coerce.number().int().min(1, "Tocá una estrella").max(5);
+const ratingField = z.coerce.number().int().min(1, "Toca una estrella").max(5);
 
 // 1..5 opcional para los aspectos. Aceptamos string vacío y 0 como "no setear".
 const optionalAspect = z
@@ -38,11 +43,11 @@ export type SubmitReviewState = {
 };
 
 /**
- * Publica una reseña. Validaciones en orden:
+ * Publica o edita una reseña (upsert). Validaciones en orden:
  * 1. DB configurada (modo demo no soporta escrituras).
  * 2. Sesión activa (sino redirect a login).
  * 3. Schema válido.
- * 4. createReview no tira por unique constraint (un usuario, una reseña por local).
+ * 4. Si el usuario ya reseñó este local → updateReview. Sino → createReview.
  *
  * En éxito: revalida `/[comuna]/[slug]` y redirige al detalle del local.
  */
@@ -52,7 +57,7 @@ export async function submitReview(
 ): Promise<SubmitReviewState> {
   if (!isDbConfigured()) {
     return {
-      error: "Modo demo: publicar reseñas requiere DATABASE_URL. Levantá la DB con pnpm db:up.",
+      error: "Modo demo: publicar reseñas requiere DATABASE_URL. Inicia la DB con pnpm db:up.",
     };
   }
 
@@ -77,7 +82,21 @@ export async function submitReview(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
 
-  try {
+  // Upsert: si ya existe reseña del usuario en este local, editar; sino crear.
+  const existing = await getMyReviewForPlace(parsed.data.placeId, session.user.id);
+
+  if (existing) {
+    await updateReview({
+      reviewId: existing.id,
+      byUserId: session.user.id,
+      rating: parsed.data.rating,
+      aspectComida: parsed.data.aspect_comida,
+      aspectAtencion: parsed.data.aspect_atencion,
+      aspectAmbiente: parsed.data.aspect_ambiente,
+      text: parsed.data.text,
+      photos: parsed.data.photos,
+    });
+  } else {
     await createReview({
       placeId: parsed.data.placeId,
       authorId: session.user.id,
@@ -88,17 +107,42 @@ export async function submitReview(
       text: parsed.data.text,
       photos: parsed.data.photos,
     });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "";
-    // Postgres 23505 = unique_violation (reviews_author_place_idx)
-    if (msg.includes("23505") || msg.toLowerCase().includes("unique")) {
-      return {
-        error: "Ya publicaste una reseña en este local. La edición llega en una próxima versión.",
-      };
-    }
-    throw error;
   }
 
+  revalidateTag("reviews");
+  revalidateTag("places");
   revalidatePath(`/${parsed.data.comuna}/${parsed.data.slug}`);
   redirect(`/${parsed.data.comuna}/${parsed.data.slug}`);
+}
+
+const deleteSchema = z.object({
+  reviewId: z.string().uuid("reviewId inválido"),
+  comuna: z.string().min(1),
+  slug: z.string().min(1),
+});
+
+/**
+ * Borra la reseña propia del usuario. Llamada como Server Action desde un
+ * form en la página de detalle. No retorna estado — éxito = redirect/refresh.
+ */
+export async function deleteMyReview(formData: FormData): Promise<void> {
+  if (!isDbConfigured()) return;
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect("/iniciar-sesion");
+  }
+
+  const parsed = deleteSchema.safeParse({
+    reviewId: formData.get("reviewId"),
+    comuna: formData.get("comuna"),
+    slug: formData.get("slug"),
+  });
+  if (!parsed.success) return;
+
+  await deleteReview(parsed.data.reviewId, session.user.id);
+
+  revalidateTag("reviews");
+  revalidateTag("places");
+  revalidatePath(`/${parsed.data.comuna}/${parsed.data.slug}`);
 }

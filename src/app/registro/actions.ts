@@ -27,7 +27,7 @@ export async function registerUser(
 ): Promise<RegisterState> {
   if (!isDbConfigured()) {
     return {
-      error: "Modo demo: registro deshabilitado. Configurá DATABASE_URL para crear cuentas.",
+      error: "Modo demo: registro deshabilitado. Configura DATABASE_URL para crear cuentas.",
     };
   }
 
@@ -45,7 +45,7 @@ export async function registerUser(
     await createUser(parsed.data);
   } catch (error) {
     if (error instanceof UserAlreadyExistsError) {
-      return { error: "Ya existe una cuenta con ese email. Probá iniciar sesión." };
+      return { error: "Ya existe una cuenta con ese email. Prueba iniciar sesión." };
     }
     throw error;
   }
@@ -62,7 +62,7 @@ export async function registerUser(
     if (error instanceof AuthError) {
       // Cuenta creada pero login automático falló — caso raro, mandamos al login
       return {
-        error: "Cuenta creada, pero el login automático falló. Iniciá sesión manualmente.",
+        error: "Cuenta creada, pero el login automático falló. Inicia sesión manualmente.",
       };
     }
     throw error;

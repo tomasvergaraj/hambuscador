@@ -1,7 +1,7 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
-import { reviews, users, type DbReview } from "@/server/db/schema";
+import { places, reviews, users, type DbReview } from "@/server/db/schema";
 import type { Review } from "@/types/place";
 import { getReviewsByPlaceIdMock } from "./mock";
 import { recomputePlaceAggregates } from "./places";
@@ -143,6 +143,213 @@ export async function createReview(input: {
   await recomputePlaceAggregates(input.placeId);
 
   return result;
+}
+
+/**
+ * Reseña del usuario en este local (si existe). null si no hay.
+ * No usa cache — depende de la sesión.
+ */
+export async function getMyReviewForPlace(
+  placeId: string,
+  userId: string,
+): Promise<DbReview | null> {
+  if (!isDbConfigured()) return null;
+
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(reviews)
+    .where(and(eq(reviews.placeId, placeId), eq(reviews.authorId, userId)))
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Edita una reseña existente. Solo el autor puede editar la suya.
+ * Recalcula los agregados del local.
+ */
+export async function updateReview(input: {
+  reviewId: string;
+  byUserId: string;
+  rating: number;
+  aspectComida?: number;
+  aspectAtencion?: number;
+  aspectAmbiente?: number;
+  text?: string;
+  photos?: string[];
+}): Promise<DbReview> {
+  if (!isDbConfigured()) {
+    throw new Error("updateReview requiere DATABASE_URL — no se puede ejecutar en modo mock.");
+  }
+
+  if (input.rating < 1 || input.rating > 5) {
+    throw new Error("rating debe estar entre 1 y 5");
+  }
+
+  const db = getDb();
+
+  const [existing] = await db
+    .select()
+    .from(reviews)
+    .where(eq(reviews.id, input.reviewId))
+    .limit(1);
+  if (!existing) throw new Error("Reseña no encontrada");
+  if (existing.authorId !== input.byUserId) {
+    throw new Error("Solo el autor puede editar su reseña");
+  }
+
+  const [updated] = await db
+    .update(reviews)
+    .set({
+      rating: input.rating,
+      aspectComida: input.aspectComida ?? null,
+      aspectAtencion: input.aspectAtencion ?? null,
+      aspectAmbiente: input.aspectAmbiente ?? null,
+      text: input.text ?? null,
+      photos: input.photos ?? [],
+      updatedAt: new Date(),
+    })
+    .where(eq(reviews.id, input.reviewId))
+    .returning();
+
+  if (!updated) throw new Error("UPDATE review no retornó fila");
+
+  await recomputePlaceAggregates(existing.placeId);
+
+  return updated;
+}
+
+// ============================================================================
+// Admin / moderación
+// ============================================================================
+
+export type AdminReviewItem = {
+  id: string;
+  rating: number;
+  text: string | null;
+  photos: string[];
+  createdAt: Date;
+  author: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  place: {
+    id: string;
+    name: string;
+    slug: string;
+    comunaSlug: string;
+    comunaLabel: string;
+  };
+};
+
+export type ReviewCursor = { createdAt: string; id: string };
+export type AdminReviewsPage = {
+  items: AdminReviewItem[];
+  nextCursor: ReviewCursor | null;
+};
+
+/**
+ * Cursor-based pagination de reseñas para el panel admin.
+ *
+ * Orden estable por `(created_at DESC, id DESC)` — el id desempata cuando
+ * dos reseñas se crean en el mismo timestamp (raro pero posible). El
+ * índice `reviews_created_at_idx` cubre exactamente este orden, así que
+ * la query es O(log N) sin importar la profundidad de la página.
+ *
+ * El cursor codifica la última fila visible. La página siguiente se pide
+ * con esa info y filtra `(created_at, id) < cursor` para saltar lo ya
+ * mostrado sin OFFSET.
+ */
+export async function getRecentReviews(opts?: {
+  limit?: number;
+  cursor?: ReviewCursor | null;
+}): Promise<AdminReviewsPage> {
+  if (!isDbConfigured()) return { items: [], nextCursor: null };
+
+  const { limit = 25, cursor } = opts ?? {};
+  const db = getDb();
+
+  // Pedimos limit+1 para saber si hay siguiente página sin un count separado
+  const lookahead = limit + 1;
+
+  const cursorCondition = cursor
+    ? sql`(${reviews.createdAt}, ${reviews.id}) < (${new Date(cursor.createdAt)}, ${cursor.id}::uuid)`
+    : sql`TRUE`;
+
+  const rows = await db
+    .select({
+      id: reviews.id,
+      rating: reviews.rating,
+      text: reviews.text,
+      photos: reviews.photos,
+      createdAt: reviews.createdAt,
+      authorId: users.id,
+      authorName: users.name,
+      authorEmail: users.email,
+      placeId: places.id,
+      placeName: places.name,
+      placeSlug: places.slug,
+      placeComunaSlug: places.comunaSlug,
+      placeComunaLabel: places.comunaLabel,
+    })
+    .from(reviews)
+    .innerJoin(users, eq(users.id, reviews.authorId))
+    .innerJoin(places, eq(places.id, reviews.placeId))
+    .where(cursorCondition)
+    .orderBy(desc(reviews.createdAt), desc(reviews.id))
+    .limit(lookahead);
+
+  const hasMore = rows.length > limit;
+  const visible = hasMore ? rows.slice(0, limit) : rows;
+  const last = visible[visible.length - 1];
+  const nextCursor: ReviewCursor | null =
+    hasMore && last ? { createdAt: last.createdAt.toISOString(), id: last.id } : null;
+
+  const items: AdminReviewItem[] = visible.map((r) => ({
+    id: r.id,
+    rating: r.rating,
+    text: r.text,
+    photos: r.photos,
+    createdAt: r.createdAt,
+    author: {
+      id: r.authorId,
+      name: r.authorName,
+      email: r.authorEmail,
+    },
+    place: {
+      id: r.placeId,
+      name: r.placeName,
+      slug: r.placeSlug,
+      comunaSlug: r.placeComunaSlug,
+      comunaLabel: r.placeComunaLabel,
+    },
+  }));
+
+  return { items, nextCursor };
+}
+
+/**
+ * Borra una reseña sin chequear autoría — para uso desde el panel admin.
+ * Decrementa el contador del autor y recalcula los agregados del local.
+ */
+export async function deleteReviewAsAdmin(reviewId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+
+  const db = getDb();
+  const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+  if (!review) return;
+
+  await db.transaction(async (tx) => {
+    await tx.delete(reviews).where(eq(reviews.id, reviewId));
+    await tx
+      .update(users)
+      .set({ reviewCount: sql`GREATEST(${users.reviewCount} - 1, 0)`, updatedAt: new Date() })
+      .where(eq(users.id, review.authorId));
+  });
+
+  await recomputePlaceAggregates(review.placeId);
 }
 
 /**

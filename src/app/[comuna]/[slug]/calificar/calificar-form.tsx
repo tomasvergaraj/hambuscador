@@ -13,11 +13,35 @@ import { submitReview, type SubmitReviewState } from "./actions";
 
 const initialState: SubmitReviewState = {};
 
-export function CalificarForm({ place }: { place: Place }) {
-  const [overallRating, setOverallRating] = useState(0);
-  const [aspectRatings, setAspectRatings] = useState<Record<string, number>>({});
-  const [reviewText, setReviewText] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+export type ReviewInitial = {
+  rating: number;
+  aspectComida: number | null;
+  aspectAtencion: number | null;
+  aspectAmbiente: number | null;
+  text: string | null;
+  photos: string[];
+};
+
+export function CalificarForm({
+  place,
+  initial,
+}: {
+  place: Place;
+  initial?: ReviewInitial;
+}) {
+  const isEdit = Boolean(initial);
+  const [overallRating, setOverallRating] = useState(initial?.rating ?? 0);
+  const [aspectRatings, setAspectRatings] = useState<Record<string, number>>(
+    initial
+      ? {
+          ...(initial.aspectComida ? { comida: initial.aspectComida } : {}),
+          ...(initial.aspectAtencion ? { atencion: initial.aspectAtencion } : {}),
+          ...(initial.aspectAmbiente ? { ambiente: initial.aspectAmbiente } : {}),
+        }
+      : {},
+  );
+  const [reviewText, setReviewText] = useState(initial?.text ?? "");
+  const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   const [state, formAction, pending] = useActionState(submitReview, initialState);
 
   const ratingLabel =
@@ -58,7 +82,11 @@ export function CalificarForm({ place }: { place: Place }) {
         <input key={url} type="hidden" name="photos" value={url} />
       ))}
 
-      <Header title="calificar" subtitle={place.name} isModal />
+      <Header
+        title={isEdit ? "editar reseña" : "calificar"}
+        subtitle={place.name}
+        isModal
+      />
 
       <div className="px-4 pt-4">
         <div className="bg-crema-deep border border-crema-edge rounded-xl p-4 text-center">
@@ -142,7 +170,13 @@ export function CalificarForm({ place }: { place: Place }) {
           type="submit"
           disabled={overallRating === 0 || pending}
         >
-          {pending ? "publicando…" : "publicar reseña"}
+          {pending
+            ? isEdit
+              ? "guardando…"
+              : "publicando…"
+            : isEdit
+              ? "guardar cambios"
+              : "publicar reseña"}
         </Button>
       </div>
     </form>

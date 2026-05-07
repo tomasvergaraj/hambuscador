@@ -2,7 +2,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { getPlaceBySlug } from "@/lib/data";
 import { auth } from "@/server/auth";
-import { CalificarForm } from "./calificar-form";
+import { getMyReviewForPlace } from "@/server/services/reviews";
+import { CalificarForm, type ReviewInitial } from "./calificar-form";
 
 type Params = { comuna: string; slug: string };
 
@@ -13,6 +14,8 @@ type Params = { comuna: string; slug: string };
  *
  * Si no hay sesión, redirige a `/iniciar-sesion` antes de renderizar el form
  * para evitar que el usuario llene todo y pierda el input.
+ *
+ * Si el usuario ya tiene reseña en este local, prefilla el form para editar.
  */
 export default async function CalificarPage({ params }: { params: Promise<Params> }) {
   const { comuna, slug } = await params;
@@ -23,5 +26,17 @@ export default async function CalificarPage({ params }: { params: Promise<Params
     redirect("/iniciar-sesion");
   }
 
-  return <CalificarForm place={place} />;
+  const existing = await getMyReviewForPlace(place.id, session.user.id);
+  const initial: ReviewInitial | undefined = existing
+    ? {
+        rating: existing.rating,
+        aspectComida: existing.aspectComida,
+        aspectAtencion: existing.aspectAtencion,
+        aspectAmbiente: existing.aspectAmbiente,
+        text: existing.text,
+        photos: existing.photos,
+      }
+    : undefined;
+
+  return <CalificarForm place={place} initial={initial} />;
 }

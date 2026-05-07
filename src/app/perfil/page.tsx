@@ -1,26 +1,53 @@
-import { IconLogout, IconStar, IconHeart, IconBuildingStore } from "@tabler/icons-react";
+import {
+  IconBuildingStore,
+  IconChevronRight,
+  IconHeart,
+  IconLogout,
+  IconStar,
+} from "@tabler/icons-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
 import { Button } from "@/components/ui/button";
-import { initialsFromName } from "@/lib/utils";
+import { cn, initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
-import { getUserStats } from "@/server/services/users";
+import {
+  getMyFavorites,
+  getMyReviews,
+  getMySubmissions,
+  getUserStats,
+  type MyFavoriteItem,
+  type MyReviewItem,
+  type MySubmissionItem,
+} from "@/server/services/users";
 import { signOutAction } from "./actions";
 
 export const metadata = {
   title: "mi perfil",
 };
 
-type SearchParams = { nuevo?: string };
+const TABS = ["resenas", "favoritos", "aportes"] as const;
+type Tab = (typeof TABS)[number];
+
+const TAB_LABEL: Record<Tab, string> = {
+  resenas: "reseñas",
+  favoritos: "favoritos",
+  aportes: "aportes",
+};
+
+type SearchParams = { nuevo?: string; tab?: string };
+
+function parseTab(value: string | undefined): Tab {
+  return TABS.find((t) => t === value) ?? "resenas";
+}
 
 /**
  * Perfil del usuario logueado. Si no hay sesión redirige a `/iniciar-sesion`.
  * Lee `?nuevo=1` (viene del redirect de `/agregar`) para mostrar un banner
- * de confirmación.
- *
- * TODO Fase 3: tabs (favoritos, mis reseñas, mis aportes) leyendo de DB.
+ * de confirmación. `?tab=resenas|favoritos|aportes` controla qué lista se
+ * renderiza.
  */
 export default async function PerfilPage({
   searchParams,
@@ -32,7 +59,20 @@ export default async function PerfilPage({
     redirect("/iniciar-sesion");
   }
 
-  const [{ nuevo }, stats] = await Promise.all([searchParams, getUserStats(session.user.id)]);
+  const { nuevo, tab: tabParam } = await searchParams;
+  const tab = parseTab(tabParam);
+  const userId = session.user.id;
+
+  // Pedimos stats siempre + solo la lista de la tab activa
+  const [stats, list] = await Promise.all([
+    getUserStats(userId),
+    tab === "resenas"
+      ? getMyReviews(userId)
+      : tab === "favoritos"
+        ? getMyFavorites(userId)
+        : getMySubmissions(userId),
+  ]);
+
   const showSubmittedBanner = nuevo === "1";
 
   const name = session.user.name ?? "tú";
@@ -71,7 +111,7 @@ export default async function PerfilPage({
           </div>
         </section>
 
-        {/* Stats reales — el detalle (listas tabuladas) llega en Fase 3 */}
+        {/* Stats */}
         <section aria-label="actividad">
           <div className="grid grid-cols-3 gap-2">
             <StatCard
@@ -92,6 +132,39 @@ export default async function PerfilPage({
           </div>
         </section>
 
+        {/* Tabs */}
+        <nav aria-label="cambiar lista" className="flex gap-2">
+          {TABS.map((t) => (
+            <Link
+              key={t}
+              href={`/perfil?tab=${t}`}
+              scroll={false}
+              aria-current={t === tab ? "page" : undefined}
+              className={cn(
+                "flex-1 text-center text-xs font-medium rounded-md px-3 py-2 transition-[transform,colors] duration-150 active:scale-[0.97]",
+                t === tab
+                  ? "bg-mostaza text-carbon"
+                  : "bg-crema-deep border border-crema-edge text-tinta-suave hover:text-carbon",
+              )}
+            >
+              {TAB_LABEL[t]}
+            </Link>
+          ))}
+        </nav>
+
+        {/* Lista de la tab activa */}
+        <section aria-label={TAB_LABEL[tab]}>
+          {tab === "resenas" && (
+            <ReviewsList items={list as MyReviewItem[]} />
+          )}
+          {tab === "favoritos" && (
+            <FavoritesList items={list as MyFavoriteItem[]} />
+          )}
+          {tab === "aportes" && (
+            <SubmissionsList items={list as MySubmissionItem[]} />
+          )}
+        </section>
+
         <div className="flex-1" />
 
         <form action={signOutAction}>
@@ -105,6 +178,10 @@ export default async function PerfilPage({
     </div>
   );
 }
+
+// ============================================================================
+// Sub-componentes (server, sin estado)
+// ============================================================================
 
 function StatCard({
   icon,
@@ -122,4 +199,182 @@ function StatCard({
       <p className="text-[10px] text-tinta-suave mt-0.5">{label}</p>
     </div>
   );
+}
+
+function EmptyState({ message, cta }: { message: string; cta?: { href: string; label: string } }) {
+  return (
+    <div className="bg-crema-deep border border-crema-edge rounded-lg px-4 py-8 text-center">
+      <p className="text-sm text-tinta-suave">{message}</p>
+      {cta ? (
+        <Link
+          href={cta.href}
+          className="inline-block mt-3 text-xs font-medium text-tomate hover:opacity-80"
+        >
+          {cta.label} →
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewsList({ items }: { items: MyReviewItem[] }) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        message="aún no calificas ninguna picá."
+        cta={{ href: "/buscar", label: "buscar dónde comer" }}
+      />
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map((r) => (
+        <li key={r.id}>
+          <Link
+            href={`/${r.place.comunaSlug}/${r.place.slug}`}
+            className="block bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-carbon truncate">{r.place.name}</p>
+                <p className="text-[10px] text-bronceado">
+                  {"★".repeat(r.rating)} · {r.place.comunaLabel} · hace{" "}
+                  {daysSince(r.createdAt)}
+                </p>
+                {r.text ? (
+                  <p className="text-xs text-tinta-suave mt-1.5 line-clamp-2 leading-relaxed">
+                    {r.text}
+                  </p>
+                ) : null}
+              </div>
+              <IconChevronRight
+                size={16}
+                className="text-bronceado shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+            </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FavoritesList({ items }: { items: MyFavoriteItem[] }) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        message="aún no guardas picás favoritas."
+        cta={{ href: "/buscar", label: "explorar locales" }}
+      />
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map((f) => (
+        <li key={f.place.id}>
+          <Link
+            href={`/${f.place.comunaSlug}/${f.place.slug}`}
+            className="block bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-carbon truncate">{f.place.name}</p>
+                <p className="text-[10px] text-bronceado">
+                  {f.place.ratingAvg ? `${Number(f.place.ratingAvg).toFixed(1)} ★ · ` : ""}
+                  {f.place.comunaLabel}
+                </p>
+              </div>
+              <IconChevronRight
+                size={16}
+                className="text-bronceado shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+            </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SubmissionsList({ items }: { items: MySubmissionItem[] }) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        message="aún no aportas picás al directorio."
+        cta={{ href: "/agregar", label: "agregar una picá" }}
+      />
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {items.map((s) => {
+        // Solo los aprobados son páginas públicas; los pending/rejected no linkean.
+        const inner = (
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-carbon truncate">{s.name}</p>
+              <p className="text-[10px] text-bronceado">
+                {s.comunaLabel} · hace {daysSince(s.createdAt)}
+              </p>
+            </div>
+            <SubmissionBadge status={s.moderationStatus} />
+          </div>
+        );
+        return (
+          <li key={s.id}>
+            {s.moderationStatus === "approved" ? (
+              <Link
+                href={`/${s.comunaSlug}/${s.slug}`}
+                className="block bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md"
+              >
+                {inner}
+              </Link>
+            ) : (
+              <div className="bg-crema-deep border border-crema-edge rounded-lg p-3">
+                {inner}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SubmissionBadge({ status }: { status: MySubmissionItem["moderationStatus"] }) {
+  if (status === "approved") {
+    return (
+      <span className="text-[9px] font-medium tracking-wider text-lechuga bg-lechuga/10 px-1.5 py-0.5 rounded uppercase shrink-0">
+        aprobado
+      </span>
+    );
+  }
+  if (status === "rejected") {
+    return (
+      <span className="text-[9px] font-medium tracking-wider text-tomate bg-tomate/10 px-1.5 py-0.5 rounded uppercase shrink-0">
+        rechazado
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] font-medium tracking-wider text-mostaza-deep bg-mostaza/15 px-1.5 py-0.5 rounded uppercase shrink-0">
+      en revisión
+    </span>
+  );
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function daysSince(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return "hoy";
+  if (days === 1) return "1 día";
+  if (days < 7) return `${days} días`;
+  if (days < 30) return `${Math.floor(days / 7)} semanas`;
+  if (days < 365) return `${Math.floor(days / 30)} meses`;
+  return `${Math.floor(days / 365)} años`;
 }
