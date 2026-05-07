@@ -39,6 +39,19 @@ function randomCoords() {
   };
 }
 
+// Convierte "12:30 - 23:00" (formato legacy del seed) al formato compacto
+// "12:30-23:00" que guardamos en `hours_by_day`.
+function toCompactRange(s: string): string {
+  return s.replace(/\s*-\s*/, "-");
+}
+
+// Asume mismo horario lun-vie y mismo horario sáb-dom.
+function buildHoursByDay(weekdays: string, weekends: string) {
+  const w = toCompactRange(weekdays);
+  const s = toCompactRange(weekends);
+  return { lun: w, mar: w, mie: w, jue: w, vie: w, sab: s, dom: s };
+}
+
 const SEED_PLACES = [
   {
     name: "El Quillotano Burger",
@@ -177,8 +190,9 @@ async function main() {
   // (en prod cambiar este flujo)
   await db.execute(`DELETE FROM users WHERE email LIKE 'seed-%@hambuscador.cl'`);
 
-  console.log("▸ Creando usuario seed...");
+  console.log("▸ Creando usuarios seed...");
   const passwordHash = await bcrypt.hash("hambuscador123", 10);
+
   const [seedUser] = await db
     .insert(users)
     .values({
@@ -189,10 +203,25 @@ async function main() {
       emailVerified: new Date(),
     })
     .returning();
-
   if (!seedUser) throw new Error("No se pudo crear el usuario seed");
-
   console.log(`✓ Usuario creado: ${seedUser.email} (password: hambuscador123)`);
+
+  // Admin de dev — solo lo usamos en local para entrar a /admin/* sin
+  // tener que correr UPDATE manual en la DB. NO se crea en prod (la prod
+  // no corre `pnpm db:seed`, se loguea con Google y se promueve por SQL).
+  const [seedAdmin] = await db
+    .insert(users)
+    .values({
+      email: "seed-admin@hambuscador.cl",
+      name: "Admin Seed",
+      username: "admin",
+      hashedPassword: passwordHash,
+      role: "admin",
+      emailVerified: new Date(),
+    })
+    .returning();
+  if (!seedAdmin) throw new Error("No se pudo crear el admin seed");
+  console.log(`✓ Admin creado: ${seedAdmin.email} (password: hambuscador123)`);
 
   console.log(`▸ Insertando ${SEED_PLACES.length} hamburgueserías de Quillota...`);
   const insertedPlaces = [];
@@ -204,6 +233,7 @@ async function main() {
         ...placeData,
         ...QUILLOTA,
         ...coords,
+        hoursByDay: buildHoursByDay(placeData.hoursWeekdays, placeData.hoursWeekends),
         moderationStatus: "approved",
         approvedAt: new Date(),
         submittedBy: seedUser.id,
@@ -264,8 +294,9 @@ async function main() {
 
   console.log("");
   console.log("✓ Seed completado.");
-  console.log(`   Visitá http://localhost:3000/quillota/${SEED_PLACES[0]?.slug ?? "..."}`);
-  console.log("   Login con: seed-camila@hambuscador.cl / hambuscador123");
+  console.log(`   Visita http://localhost:3000/quillota/${SEED_PLACES[0]?.slug ?? "..."}`);
+  console.log("   Usuario:  seed-camila@hambuscador.cl / hambuscador123");
+  console.log("   Admin:    seed-admin@hambuscador.cl  / hambuscador123  (acceso a /admin)");
   console.log("");
 
   await closeDb();

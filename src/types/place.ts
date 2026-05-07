@@ -1,4 +1,4 @@
-import type { CuisineId, PriceRangeId, PlaceStatus, ReviewAspectId } from "@/lib/constants";
+import type { CuisineId, DayKey, PriceRangeId, PlaceStatus, ReviewAspectId } from "@/lib/constants";
 
 // ============================================================================
 // Place (hamburguesería)
@@ -19,8 +19,14 @@ export type Place = {
   reviewCount: number;
   status: PlaceStatus;
   hours: {
-    weekdays: string; // "12:00 - 23:30"
+    weekdays: string; // resumen legacy "12:00 - 23:30"
     weekends: string;
+    /**
+     * Map por día (lun..dom): "HH:MM-HH:MM" o `null` (cerrado) si está
+     * presente en DB. `null` el día completo cuando no se completó el
+     * formulario por día (locales legacy o seed).
+     */
+    byDay: Partial<Record<DayKey, string | null>> | null;
   };
   coords: { lat: number; lng: number };
   distanceM?: number; // distance del usuario, calculada en runtime

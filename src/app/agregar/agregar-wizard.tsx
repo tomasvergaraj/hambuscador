@@ -1,16 +1,31 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 
 import { Header } from "@/components/nav/header";
+import { AddressAutocomplete } from "@/components/place/address-autocomplete";
+import {
+  DEFAULT_SCHEDULE,
+  DaysSchedule,
+  serializeSchedule,
+  summarizeWeekdays,
+  summarizeWeekends,
+  type ScheduleValue,
+} from "@/components/place/days-schedule";
 import { PhotoUploader } from "@/components/place/photo-uploader";
+import { PinPickerMap } from "@/components/place/pin-picker-map";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ProgressDots } from "@/components/ui/progress-dots";
 import { COMUNAS_REGISTRY, CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-import { createPlaceAction, type CreatePlaceState } from "./actions";
+import {
+  checkPlaceExistsAction,
+  createPlaceAction,
+  type CreatePlaceState,
+} from "./actions";
 
 const initial: CreatePlaceState = {};
 type Step = 1 | 2 | 3;
@@ -21,21 +36,62 @@ export function AgregarWizard() {
   const [name, setName] = useState("");
   const [comunaSlug, setComunaSlug] = useState("");
   const [address, setAddress] = useState("");
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
   const [cuisines, setCuisines] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState("");
   const [specialty, setSpecialty] = useState("");
-  const [hoursWeekdays, setHoursWeekdays] = useState("");
-  const [hoursWeekends, setHoursWeekends] = useState("");
+  const [schedule, setSchedule] = useState<ScheduleValue>(DEFAULT_SCHEDULE);
   const [phone, setPhone] = useState("");
   const [instagram, setInstagram] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
 
+  // Validación step 1 → 2: chequea duplicado nombre+comuna en DB
+  const [step1Error, setStep1Error] = useState<string | null>(null);
+  const [checkingDup, setCheckingDup] = useState(false);
+
   const [state, formAction, pending] = useActionState(createPlaceAction, initial);
 
+  const hoursByDayJson = JSON.stringify(serializeSchedule(schedule));
+  const hoursWeekdays = summarizeWeekdays(schedule);
+  const hoursWeekends = summarizeWeekends(schedule);
+
+  // Sesgo geográfico para el autocomplete: centroide de la comuna seleccionada
+  const bias = useMemo(() => {
+    const c = COMUNAS_REGISTRY.find((c) => c.slug === comunaSlug);
+    return c ? { lat: c.lat, lng: c.lng } : undefined;
+  }, [comunaSlug]);
+
+  const hasCoords = lat !== null && lng !== null;
   const step1Valid =
-    name.trim().length >= 2 && comunaSlug.length > 0 && address.trim().length >= 5;
+    name.trim().length >= 2 && comunaSlug.length > 0 && address.trim().length >= 5 && hasCoords;
   const step2Valid = cuisines.length > 0 && priceRange.length > 0;
   const canContinue = step === 1 ? step1Valid : step === 2 ? step2Valid : true;
+
+  async function handleContinue() {
+    if (step === 1) {
+      setStep1Error(null);
+      setCheckingDup(true);
+      try {
+        const { exists } = await checkPlaceExistsAction({
+          name: name.trim(),
+          comunaSlug,
+        });
+        if (exists) {
+          setStep1Error(
+            "Ya existe un local con ese nombre en esa comuna. Intenta uno más específico.",
+          );
+          return;
+        }
+      } catch {
+        // Si falla la verificación, igual permitimos avanzar — el unique
+        // constraint del INSERT bloquea al final si el caso era real.
+      } finally {
+        setCheckingDup(false);
+      }
+    }
+    setStep((s) => ((s + 1) as Step));
+  }
 
   const stepTitle =
     step === 1
@@ -56,6 +112,8 @@ export function AgregarWizard() {
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="comunaSlug" value={comunaSlug} />
       <input type="hidden" name="address" value={address} />
+      <input type="hidden" name="lat" value={lat ?? ""} />
+      <input type="hidden" name="lng" value={lng ?? ""} />
       {cuisines.map((c) => (
         <input key={c} type="hidden" name="cuisines" value={c} />
       ))}
@@ -63,6 +121,7 @@ export function AgregarWizard() {
       <input type="hidden" name="specialty" value={specialty} />
       <input type="hidden" name="hoursWeekdays" value={hoursWeekdays} />
       <input type="hidden" name="hoursWeekends" value={hoursWeekends} />
+      <input type="hidden" name="hoursByDay" value={hoursByDayJson} />
       <input type="hidden" name="phone" value={phone} />
       <input type="hidden" name="instagram" value={instagram} />
       {photos.map((url) => (
@@ -88,7 +147,10 @@ export function AgregarWizard() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (step1Error) setStep1Error(null);
+                }}
                 placeholder="ej. Streat Burger"
                 className={INPUT_CLS}
               />
@@ -97,10 +159,13 @@ export function AgregarWizard() {
             <Field label="comuna">
               <select
                 value={comunaSlug}
-                onChange={(e) => setComunaSlug(e.target.value)}
+                onChange={(e) => {
+                  setComunaSlug(e.target.value);
+                  if (step1Error) setStep1Error(null);
+                }}
                 className={INPUT_CLS}
               >
-                <option value="">elegí una comuna...</option>
+                <option value="">elige una comuna...</option>
                 {COMUNAS_REGISTRY.map((c) => (
                   <option key={c.slug} value={c.slug}>
                     {c.label}
@@ -110,17 +175,47 @@ export function AgregarWizard() {
             </Field>
 
             <Field label="dirección">
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(text) => {
+                  setAddress(text);
+                  // Si el usuario edita el texto manualmente después de
+                  // haber elegido una sugerencia, invalidamos las coords
+                  // para forzar un nuevo pin.
+                  if (hasCoords) {
+                    setLat(null);
+                    setLng(null);
+                  }
+                }}
+                onSelectLocation={(la, ln) => {
+                  setLat(la);
+                  setLng(ln);
+                }}
+                bias={bias}
                 placeholder="ej. Av. Italia 1234"
-                className={INPUT_CLS}
               />
-              <p className="text-[10px] text-bronceado mt-0.5">
-                la ubicación exacta se ajusta al aprobar el local
-              </p>
+              {!hasCoords ? (
+                <p className="text-[10px] text-bronceado mt-0.5">
+                  escribe al menos 4 letras y elige una de las sugerencias
+                </p>
+              ) : null}
             </Field>
+
+            {hasCoords && lat !== null && lng !== null ? (
+              <Field label="ajusta el pin si está corrido">
+                <PinPickerMap
+                  lat={lat}
+                  lng={lng}
+                  onChange={(la, ln) => {
+                    setLat(la);
+                    setLng(ln);
+                  }}
+                />
+                <p className="text-[10px] text-bronceado mt-0.5">
+                  arrastra el pin para corregir la ubicación
+                </p>
+              </Field>
+            ) : null}
           </>
         ) : null}
 
@@ -153,6 +248,20 @@ export function AgregarWizard() {
                   </Chip>
                 ))}
               </div>
+              <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-bronceado">
+                {PRICE_RANGES.map((p) => (
+                  <li
+                    key={p.id}
+                    className={cn(
+                      "flex items-baseline gap-1.5",
+                      priceRange === p.id && "text-carbon font-medium",
+                    )}
+                  >
+                    <span className="font-mono">{p.label}</span>
+                    <span>{p.description}</span>
+                  </li>
+                ))}
+              </ul>
             </Field>
 
             <Field label="especialidad (opcional)">
@@ -165,24 +274,8 @@ export function AgregarWizard() {
               />
             </Field>
 
-            <Field label="horario lunes a viernes (opcional)">
-              <input
-                type="text"
-                value={hoursWeekdays}
-                onChange={(e) => setHoursWeekdays(e.target.value)}
-                placeholder="ej. 13:00 - 23:00"
-                className={INPUT_CLS}
-              />
-            </Field>
-
-            <Field label="horario sábado y domingo (opcional)">
-              <input
-                type="text"
-                value={hoursWeekends}
-                onChange={(e) => setHoursWeekends(e.target.value)}
-                placeholder="ej. 13:00 - 00:00"
-                className={INPUT_CLS}
-              />
+            <Field label="horario por día (opcional)">
+              <DaysSchedule value={schedule} onChange={setSchedule} />
             </Field>
           </>
         ) : null}
@@ -221,12 +314,12 @@ export function AgregarWizard() {
           </>
         ) : null}
 
-        {state.error ? (
+        {state.error || step1Error ? (
           <p
             role="alert"
             className="text-xs text-tomate font-medium bg-tomate/10 border border-tomate/30 rounded-md px-3 py-2 mt-2"
           >
-            {state.error}
+            {state.error ?? step1Error}
           </p>
         ) : null}
       </main>
@@ -243,18 +336,24 @@ export function AgregarWizard() {
           atrás
         </Button>
         {step < 3 ? (
+          // Key distinto para forzar a React a montar otro DOM node cuando
+          // pasamos al paso final — sino el cambio de type="button" →
+          // type="submit" en el mismo <button> hace que el click pendiente
+          // se propague como submit y se salte el paso 3.
           <Button
+            key="next"
             variant="primary"
             size="lg"
             type="button"
             className="flex-[2]"
-            onClick={() => setStep((s) => ((s + 1) as Step))}
-            disabled={!canContinue || pending}
+            onClick={handleContinue}
+            disabled={!canContinue || pending || checkingDup}
           >
-            continuar →
+            {checkingDup ? "verificando…" : "continuar →"}
           </Button>
         ) : (
           <Button
+            key="submit"
             variant="primary"
             size="lg"
             type="submit"
@@ -273,10 +372,14 @@ const INPUT_CLS =
   "w-full bg-crema-deep border border-crema-edge rounded-md px-3 py-2.5 text-sm text-carbon placeholder:text-bronceado outline-none focus:border-bronceado";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // No usamos <label> acá: muchos Fields contienen varios inputs (chips,
+  // switches, time pickers) y un <label> que envuelve N inputs se asocia
+  // implícitamente con el PRIMER form control descendiente, haciendo que
+  // un click en cualquier parte del Field active ese primer control.
   return (
-    <label className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5">
       <span className="text-[11px] text-bronceado font-medium">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }

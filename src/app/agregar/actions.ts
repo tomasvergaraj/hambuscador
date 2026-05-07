@@ -7,29 +7,58 @@ import { z } from "zod";
 import { COMUNAS_REGISTRY, CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { auth } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
-import { createPlace } from "@/server/services/places";
+import { createPlace, placeExists } from "@/server/services/places";
 
 // ============================================================================
 // Schema de validación del wizard
 // ----------------------------------------------------------------------------
-// Lo mantenemos liviano: name + comuna + address son obligatorios; lat/lng
-// vienen del centroide de la comuna (geocoding real es Fase 3); cuisines y
-// priceRange son requeridos para que la ficha sea útil.
+// name + comuna + address + lat/lng son obligatorios. Las coords vienen del
+// autocomplete (Nominatim) o del pin draggable del mapa — ya no usamos el
+// centroide de la comuna como fallback.
 // ============================================================================
 
 const cuisineIds = CUISINE_TYPES.map((c) => c.id) as [string, ...string[]];
 const priceIds = PRICE_RANGES.map((p) => p.id) as [string, ...string[]];
 const comunaSlugs = COMUNAS_REGISTRY.map((c) => c.slug) as [string, ...string[]];
 
+// Bounding box (laxo) para Chile continental + insular cercana
+const CHILE_LAT_MIN = -56;
+const CHILE_LAT_MAX = -17;
+const CHILE_LNG_MIN = -76;
+const CHILE_LNG_MAX = -66;
+
 const placeSchema = z.object({
   name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(100),
   comunaSlug: z.enum(comunaSlugs, { errorMap: () => ({ message: "Elige una comuna" }) }),
   address: z.string().trim().min(5, "La dirección está muy corta").max(200),
+  lat: z.coerce
+    .number()
+    .min(CHILE_LAT_MIN, "Ubicación fuera de Chile")
+    .max(CHILE_LAT_MAX, "Ubicación fuera de Chile"),
+  lng: z.coerce
+    .number()
+    .min(CHILE_LNG_MIN, "Ubicación fuera de Chile")
+    .max(CHILE_LNG_MAX, "Ubicación fuera de Chile"),
   cuisines: z.array(z.enum(cuisineIds)).min(1, "Marca al menos un tipo de cocina"),
   priceRange: z.enum(priceIds, { errorMap: () => ({ message: "Elige un rango de precio" }) }),
   specialty: z.string().trim().max(120).optional().or(z.literal("")),
   hoursWeekdays: z.string().trim().max(50).optional().or(z.literal("")),
   hoursWeekends: z.string().trim().max(50).optional().or(z.literal("")),
+  hoursByDay: z
+    .string()
+    .optional()
+    .transform((s) => {
+      if (!s) return undefined;
+      try {
+        const parsed = JSON.parse(s) as unknown;
+        if (parsed && typeof parsed === "object") {
+          return parsed as Record<string, string | null>;
+        }
+      } catch {
+        // ignore
+      }
+      return undefined;
+    }),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
   photos: z.array(z.string().url()).max(4, "Máximo 4 fotos").default([]),
@@ -56,7 +85,7 @@ export async function createPlaceAction(
 ): Promise<CreatePlaceState> {
   if (!isDbConfigured()) {
     return {
-      error: "Modo demo: agregar locales requiere DATABASE_URL. Levantá la DB con pnpm db:up.",
+      error: "Modo demo: agregar locales requiere DATABASE_URL. Inicia la DB con pnpm db:up.",
     };
   }
 
@@ -69,11 +98,14 @@ export async function createPlaceAction(
     name: formData.get("name"),
     comunaSlug: formData.get("comunaSlug"),
     address: formData.get("address"),
+    lat: formData.get("lat"),
+    lng: formData.get("lng"),
     cuisines: formData.getAll("cuisines"),
     priceRange: formData.get("priceRange"),
     specialty: formData.get("specialty"),
     hoursWeekdays: formData.get("hoursWeekdays"),
     hoursWeekends: formData.get("hoursWeekends"),
+    hoursByDay: formData.get("hoursByDay"),
     phone: formData.get("phone"),
     instagram: formData.get("instagram"),
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
@@ -95,13 +127,14 @@ export async function createPlaceAction(
       comunaLabel: comuna.label,
       region: comuna.region,
       address: parsed.data.address,
-      lat: comuna.lat,
-      lng: comuna.lng,
+      lat: parsed.data.lat,
+      lng: parsed.data.lng,
       cuisines: parsed.data.cuisines,
       priceRange: parsed.data.priceRange,
       specialty: parsed.data.specialty || undefined,
       hoursWeekdays: parsed.data.hoursWeekdays || undefined,
       hoursWeekends: parsed.data.hoursWeekends || undefined,
+      hoursByDay: parsed.data.hoursByDay,
       phone: parsed.data.phone || undefined,
       instagram: parsed.data.instagram || undefined,
       photos: parsed.data.photos,
@@ -112,7 +145,7 @@ export async function createPlaceAction(
     // Postgres 23505 = unique_violation (places_comuna_slug_idx)
     if (msg.includes("23505") || msg.toLowerCase().includes("unique")) {
       return {
-        error: "Ya existe un local con ese nombre en esa comuna. Probá un nombre más específico.",
+        error: "Ya existe un local con ese nombre en esa comuna. Intenta uno más específico.",
       };
     }
     throw error;
@@ -122,4 +155,20 @@ export async function createPlaceAction(
   revalidatePath("/");
   revalidatePath("/buscar");
   redirect("/perfil?nuevo=1");
+}
+
+/**
+ * Server action liviana para validar nombre+comuna desde el wizard antes
+ * de avanzar al paso 2. Devuelve `{ exists }`.
+ */
+export async function checkPlaceExistsAction(input: {
+  name: string;
+  comunaSlug: string;
+}): Promise<{ exists: boolean }> {
+  if (!isDbConfigured()) return { exists: false };
+  const name = input.name?.trim();
+  const slug = input.comunaSlug?.trim();
+  if (!name || name.length < 2 || !slug) return { exists: false };
+  const exists = await placeExists(name, slug);
+  return { exists };
 }

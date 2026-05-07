@@ -83,6 +83,31 @@ export type ComunaSlug = (typeof COMUNAS_REGISTRY)[number]["slug"];
 export const SEED_COMUNAS = COMUNAS_REGISTRY.map((c) => c.slug);
 
 /**
+ * Días de la semana para el horario por día (storage en `places.hours_by_day`).
+ * Orden importa: arranca en lunes, termina en domingo (estilo es-CL).
+ */
+export const DAY_KEYS = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"] as const;
+export type DayKey = (typeof DAY_KEYS)[number];
+export const DAY_LABEL: Record<DayKey, string> = {
+  lun: "lun",
+  mar: "mar",
+  mie: "mié",
+  jue: "jue",
+  vie: "vie",
+  sab: "sáb",
+  dom: "dom",
+};
+export const DAY_FULL_LABEL: Record<DayKey, string> = {
+  lun: "lunes",
+  mar: "martes",
+  mie: "miércoles",
+  jue: "jueves",
+  vie: "viernes",
+  sab: "sábado",
+  dom: "domingo",
+};
+
+/**
  * Tabs del bottom navigation. Orden importa.
  */
 export const BOTTOM_NAV_TABS = [

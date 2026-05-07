@@ -33,6 +33,7 @@ function dbPlaceToUi(row: DbPlace, distanceM?: number): Place {
     hours: {
       weekdays: row.hoursWeekdays ?? "",
       weekends: row.hoursWeekends ?? "",
+      byDay: row.hoursByDay ?? null,
     },
     coords: {
       lat: Number(row.lat),
@@ -89,29 +90,32 @@ export async function getPlacesNearby(opts?: {
   const db = getDb();
 
   if (lat !== undefined && lng !== undefined) {
-    // Query geo con PostGIS
-    const rows = await db.execute(sql`
-      SELECT
-        p.*,
-        ST_Distance(
-          p.location,
+    // Query geo con PostGIS — usamos drizzle .select() en vez de SQL crudo
+    // para que las columnas vuelvan ya mapeadas a camelCase (sino dbPlaceToUi
+    // recibe campos undefined). El predicado geo va como sql literal.
+    const rows = await db
+      .select({
+        place: places,
+        distanceM: sql<number>`ST_Distance(
+          ${places}.location,
           ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography
-        ) AS distance_m
-      FROM places p
-      WHERE
-        p.moderation_status = 'approved'
-        AND ST_DWithin(
-          p.location,
-          ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
-          ${radiusM}
-        )
-      ORDER BY distance_m ASC
-      LIMIT ${limit}
-    `);
+        )`.as("distance_m"),
+      })
+      .from(places)
+      .where(
+        and(
+          eq(places.moderationStatus, "approved"),
+          sql`ST_DWithin(
+            ${places}.location,
+            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
+            ${radiusM}
+          )`,
+        ),
+      )
+      .orderBy(sql`distance_m ASC`)
+      .limit(limit);
 
-    return (rows.rows as Array<DbPlace & { distance_m: number }>).map((row) =>
-      dbPlaceToUi(row, Number(row.distance_m)),
-    );
+    return rows.map((r) => dbPlaceToUi(r.place, Number(r.distanceM)));
   }
 
   // Fallback: solo locales aprobados, ordenados por rating
@@ -235,6 +239,7 @@ export async function createPlace(input: {
   specialty?: string;
   hoursWeekdays?: string;
   hoursWeekends?: string;
+  hoursByDay?: Record<string, string | null>;
   phone?: string;
   instagram?: string;
   photos?: string[];
@@ -261,6 +266,7 @@ export async function createPlace(input: {
     specialty: input.specialty ?? null,
     hoursWeekdays: input.hoursWeekdays ?? null,
     hoursWeekends: input.hoursWeekends ?? null,
+    hoursByDay: input.hoursByDay ?? null,
     phone: input.phone ?? null,
     instagram: input.instagram ?? null,
     photos: input.photos ?? [],
@@ -277,6 +283,46 @@ export async function createPlace(input: {
  * Lista de places en estado `pending` (aguardando moderación), ordenados
  * por más viejos primero (FIFO de revisión).
  */
+/**
+ * ¿Ya hay un local con este nombre en esta comuna?
+ * Usado por el wizard de /agregar para validar antes de submit (mejor UX
+ * que esperar a que pegue el unique constraint en el INSERT).
+ */
+export async function placeExists(name: string, comunaSlug: string): Promise<boolean> {
+  if (!isDbConfigured()) return false;
+  const slug = toSlugLike(name);
+  if (slug.length === 0) return false;
+
+  const db = getDb();
+  const [row] = await db
+    .select({ id: places.id })
+    .from(places)
+    .where(and(eq(places.slug, slug), eq(places.comunaSlug, comunaSlug)))
+    .limit(1);
+
+  return Boolean(row);
+}
+
+/**
+ * Slugs (+ updatedAt) de todos los locales aprobados. Para el sitemap.
+ * Solo retorna lo mínimo necesario — nada de fotos, reseñas, etc.
+ */
+export async function getApprovedSlugs(): Promise<
+  Array<{ comunaSlug: string; slug: string; updatedAt: Date }>
+> {
+  if (!isDbConfigured()) return [];
+  const db = getDb();
+  return db
+    .select({
+      comunaSlug: places.comunaSlug,
+      slug: places.slug,
+      updatedAt: places.updatedAt,
+    })
+    .from(places)
+    .where(eq(places.moderationStatus, "approved"))
+    .orderBy(sql`updated_at DESC`);
+}
+
 export async function getPendingPlaces(opts?: { limit?: number }): Promise<Place[]> {
   if (!isDbConfigured()) return [];
 
