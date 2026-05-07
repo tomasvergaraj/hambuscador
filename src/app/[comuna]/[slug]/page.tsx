@@ -1,4 +1,4 @@
-import { IconArrowLeft, IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPencil, IconPhone, IconPhoto, IconTrash, IconHeart } from "@tabler/icons-react";
+import { IconArrowLeft, IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPencil, IconPhone, IconPhoto, IconRosetteDiscountCheckFilled, IconTrash, IconHeart } from "@tabler/icons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -145,8 +145,17 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
       <main className="px-4 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h1 className="font-display font-semibold text-2xl text-carbon tracking-tight leading-tight">
-              {place.name}
+            <h1 className="font-display font-semibold text-2xl text-carbon tracking-tight leading-tight inline-flex items-center gap-1.5 flex-wrap">
+              <span>{place.name}</span>
+              {place.isVerified && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider bg-mostaza/20 text-mostaza-deep px-2 py-0.5 rounded-full"
+                  title="local verificado por hambuscador"
+                >
+                  <IconRosetteDiscountCheckFilled size={12} aria-hidden="true" />
+                  verificado
+                </span>
+              )}
             </h1>
             <p className="text-xs text-tinta-suave mt-1">
               {place.cuisines.join(" · ")} · {place.comunaLabel}

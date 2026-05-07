@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { IconPhoto } from "@tabler/icons-react";
+import { IconPhoto, IconRosetteDiscountCheckFilled } from "@tabler/icons-react";
 import type { Place } from "@/types/place";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -66,7 +66,16 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
           ) : null}
         </div>
         <div className="p-3.5">
-          <h3 className="font-display font-semibold text-carbon">{place.name}</h3>
+          <h3 className="font-display font-semibold text-carbon inline-flex items-center gap-1">
+            {place.name}
+            {place.isVerified && (
+              <IconRosetteDiscountCheckFilled
+                size={16}
+                className="text-mostaza shrink-0"
+                aria-label="local verificado"
+              />
+            )}
+          </h3>
           <p className="text-xs text-tinta-suave mt-0.5">
             {cuisineLabel} · {place.comunaLabel} · {priceLabel}
           </p>
@@ -109,8 +118,15 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
       </div>
       <div className="flex-1 min-w-0 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-display font-semibold text-sm text-carbon truncate">
-            {place.name}
+          <h3 className="font-display font-semibold text-sm text-carbon truncate inline-flex items-center gap-1 min-w-0">
+            <span className="truncate">{place.name}</span>
+            {place.isVerified && (
+              <IconRosetteDiscountCheckFilled
+                size={14}
+                className="text-mostaza shrink-0"
+                aria-label="local verificado"
+              />
+            )}
           </h3>
           <StatusPill status={place.status} className="shrink-0" />
         </div>
