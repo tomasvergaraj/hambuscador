@@ -23,7 +23,13 @@ export const metadata: Metadata = {
   },
   description:
     "Encuentra, califica y descubre las mejores hamburgueserías de todo Chile. Reseñas reales, fotos del producto y rankings por comuna.",
-  metadataBase: new URL("https://hambuscador.cl"),
+  // Base absoluta para resolver URLs en metadata (og:image, canonical, etc).
+  // Lee de env porque mientras no haya dominio propio el deploy vive en
+  // *.vercel.app, y un metadataBase hardcodeado al dominio futuro hace que
+  // WhatsApp / scrapers fallen al pedir la og:image (404).
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://hambuscador.cl",
+  ),
   applicationName: "Hambuscador",
   authors: [{ name: "Hambuscador" }],
   keywords: [
@@ -41,7 +47,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "es_CL",
     siteName: "Hambuscador",
-    url: "https://hambuscador.cl",
+    url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://hambuscador.cl",
   },
   twitter: {
     card: "summary_large_image",
