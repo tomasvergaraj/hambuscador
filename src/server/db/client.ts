@@ -24,7 +24,7 @@ export function getDb(): NodePgDatabase<typeof schema> {
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "DATABASE_URL no está seteado. Definilo en .env.local o levantá el docker " +
+      "DATABASE_URL no está seteado. Defínelo en .env.local o inicia el docker " +
         "compose con `pnpm db:up`.",
     );
   }

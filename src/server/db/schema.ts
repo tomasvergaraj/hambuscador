@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -38,6 +39,13 @@ export const users = pgTable("users", {
   bio: text("bio"),
   role: text("role", { enum: userRoleEnum }).notNull().default("user"),
   reviewCount: integer("review_count").notNull().default(0),
+
+  /**
+   * Si está seteado, el usuario está baneado y no puede iniciar sesión.
+   * Sus reseñas y aportes existentes quedan visibles (el ban es preventivo,
+   * no retroactivo). Un admin puede unban seteando a null.
+   */
+  bannedAt: timestamp("banned_at", { withTimezone: true }),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -125,6 +133,13 @@ export const places = pgTable(
     priceRange: text("price_range").notNull(), // "$" | "$$" | "$$$" | "$$$$"
     hoursWeekdays: text("hours_weekdays"),
     hoursWeekends: text("hours_weekends"),
+    /**
+     * Horario por día (lun..dom). Map<DayKey, "HH:MM-HH:MM" | null>.
+     * Source of truth nuevo desde el wizard de /agregar; los campos
+     * `hours_weekdays`/`hours_weekends` quedan como derivación legible
+     * para los lectores que aún no leen esta columna.
+     */
+    hoursByDay: jsonb("hours_by_day").$type<Record<string, string | null>>(),
     phone: text("phone"),
     instagram: text("instagram"),
     website: text("website"),
@@ -185,6 +200,13 @@ export const reviews = pgTable(
     ),
     placeIdx: index("reviews_place_idx").on(table.placeId),
     authorIdx: index("reviews_author_idx").on(table.authorId),
+    // Para paginación cursor en /admin/reseñas (orden estable por
+    // (created_at desc, id desc)). Sin esto, a 100K filas la query
+    // hace seq scan por cada página.
+    createdAtIdx: index("reviews_created_at_idx").on(
+      sql`${table.createdAt} DESC`,
+      sql`${table.id} DESC`,
+    ),
   }),
 );
 

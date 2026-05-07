@@ -47,3 +47,7 @@ yarn-error.log*
 
 # Claude Code (no commitear estado local)
 .claude/
+
+# Docker Compose overrides locales (puertos, mounts, etc por dev)
+docker-compose.override.yml
+docker-compose.override.yaml

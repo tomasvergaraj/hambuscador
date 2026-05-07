@@ -44,7 +44,7 @@ export async function requestUploadUrl(input: {
   if (!isStorageConfigured()) {
     return {
       ok: false,
-      error: "modo demo: configurá las vars R2_* en .env.local",
+      error: "modo demo: configura las vars R2_* en .env.local",
     };
   }
 
