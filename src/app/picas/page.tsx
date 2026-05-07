@@ -16,7 +16,7 @@ export default async function PicasIndexPage() {
 
   return (
     <main className="min-h-screen pb-24">
-      <Header title="picas" subtitle="listas curadas" />
+      <Header title="picas" subtitle="listas curadas" backHref="/" />
 
       <section className="px-4 pt-4">
         <h1 className="font-display font-semibold text-[26px] leading-[1.05] text-carbon">
