@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/auth";
+import { countPendingPlaces } from "@/server/services/places";
 
 /**
  * Layout compartido para todas las rutas /admin/*. Guard de rol admin
@@ -16,6 +17,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (session.user.role !== "admin") {
     redirect("/");
   }
+
+  // Count para el badge del tab pendientes. No-op en modo demo (sin DB).
+  const pendingCount = await countPendingPlaces();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -35,9 +39,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       >
         <Link
           href="/admin/moderacion"
-          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza inline-flex items-center gap-1.5"
         >
           pendientes
+          {pendingCount > 0 && (
+            <span
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-mostaza text-carbon text-[10px] font-bold"
+              aria-label={`${pendingCount} ${pendingCount === 1 ? "pendiente" : "pendientes"}`}
+            >
+              {pendingCount}
+            </span>
+          )}
         </Link>
         <Link
           href="/admin/places"

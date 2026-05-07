@@ -638,6 +638,21 @@ export async function getApprovedSlugs(): Promise<
     .orderBy(sql`updated_at DESC`);
 }
 
+/**
+ * Cuenta los locales en estado `pending`. Usado por el admin layout para
+ * el badge en el tab "pendientes". Más eficiente que getPendingPlaces().length
+ * cuando solo necesitás el número.
+ */
+export async function countPendingPlaces(): Promise<number> {
+  if (!isDbConfigured()) return 0;
+  const db = getDb();
+  const rows = await db.execute(
+    sql`SELECT COUNT(*)::int AS count FROM places WHERE moderation_status = 'pending'`,
+  );
+  const first = rows.rows[0] as { count?: number } | undefined;
+  return first?.count ?? 0;
+}
+
 export async function getPendingPlaces(opts?: { limit?: number }): Promise<Place[]> {
   if (!isDbConfigured()) return [];
 
