@@ -63,6 +63,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
 
   const [reviews, session] = await Promise.all([getReviewsByPlaceId(place.id), auth()]);
   const userId = session?.user?.id ?? null;
+  const isAdmin = session?.user?.role === "admin";
   const [myReview, favorited] = await Promise.all([
     userId ? getMyReviewForPlace(place.id, userId) : Promise.resolve(null),
     userId ? isFavorite(userId, place.id) : Promise.resolve(false),
@@ -97,6 +98,16 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             <IconArrowLeft size={18} aria-hidden="true" />
           </Link>
           <div className="flex gap-2">
+            {isAdmin && (
+              <Link
+                href={`/admin/places/${place.id}/edit`}
+                aria-label="editar (admin)"
+                title="editar (admin)"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-carbon text-mostaza hover:bg-carbon-soft transition-[transform,colors] duration-150 active:scale-90"
+              >
+                <IconPencil size={18} aria-hidden="true" />
+              </Link>
+            )}
             <ShareButton
               path={`/${place.comuna}/${place.slug}`}
               title={place.name}

@@ -135,6 +135,30 @@ function DayRow({
  * Convierte el state del componente al formato de la columna `hours_by_day`
  * de la DB: cada día → "HH:MM-HH:MM" o `null` si está cerrado / inválido.
  */
+/**
+ * Inversa de serializeSchedule: levanta el formato `byDay` de la DB
+ * (`{ lun: "13:00-23:00", mar: null, ... }`) a ScheduleValue para inicializar
+ * un form de edición.
+ */
+export function deserializeSchedule(
+  byDay: Partial<Record<DayKey, string | null>> | null | undefined,
+): ScheduleValue {
+  const result: ScheduleValue = { ...DEFAULT_SCHEDULE };
+  if (!byDay) return result;
+  for (const d of DAY_KEYS) {
+    const v = byDay[d];
+    if (v == null) {
+      result[d] = { ...DEFAULT_SCHEDULE[d], open: false };
+      continue;
+    }
+    const m = v.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    if (m && m[1] && m[2]) {
+      result[d] = { open: true, from: m[1], to: m[2] };
+    }
+  }
+  return result;
+}
+
 export function serializeSchedule(value: ScheduleValue): Record<DayKey, string | null> {
   const out = {} as Record<DayKey, string | null>;
   for (const d of DAY_KEYS) {

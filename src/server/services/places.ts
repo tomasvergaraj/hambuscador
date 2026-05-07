@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import type { CuisineId, PriceRangeId } from "@/lib/constants";
 import { tokenizeQuery } from "@/lib/search";
@@ -385,6 +385,100 @@ export async function searchPlaces(opts: {
   }
 
   return { items: mapped, usedFuzzy };
+}
+
+/**
+ * Obtiene un place por ID (cualquier estado de moderación).
+ * Solo para usar desde admin pages — bypassa el filtro de approved.
+ */
+export async function getPlaceByIdForAdmin(id: string): Promise<Place | null> {
+  if (!isDbConfigured()) return null;
+  const db = getDb();
+  const [row] = await db.select().from(places).where(eq(places.id, id)).limit(1);
+  return row ? dbPlaceToUi(row) : null;
+}
+
+/**
+ * Lista para admin con búsqueda opcional por nombre/comuna. Incluye locales
+ * en cualquier estado (approved/pending/rejected). Para el index editorial.
+ */
+export async function getAllPlacesForAdmin(opts?: {
+  query?: string;
+  status?: "approved" | "pending" | "rejected";
+  limit?: number;
+}): Promise<Array<Place & { moderationStatus: string }>> {
+  if (!isDbConfigured()) return [];
+  const { query, status, limit = 50 } = opts ?? {};
+  const db = getDb();
+  const conditions = [];
+  if (status) conditions.push(eq(places.moderationStatus, status));
+  if (query && query.trim().length > 0) {
+    const q = `%${query.trim()}%`;
+    const orC = or(ilike(places.name, q), ilike(places.comunaLabel, q));
+    if (orC) conditions.push(orC);
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const rows = await db
+    .select()
+    .from(places)
+    .where(where)
+    .orderBy(sql`updated_at DESC`)
+    .limit(limit);
+  return rows.map((r) => ({ ...dbPlaceToUi(r), moderationStatus: r.moderationStatus }));
+}
+
+/**
+ * Patch parcial de un place. Solo desde Server Action protegida por rol admin.
+ * NO permite cambiar `slug` ni `comunaSlug` para preservar la URL pública
+ * (cambiarlos rompería links existentes y SEO). Si se necesita rebatear,
+ * mejor rechazar + recrear.
+ */
+export async function updatePlace(
+  placeId: string,
+  patch: {
+    name?: string;
+    comunaLabel?: string;
+    region?: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+    cuisines?: string[];
+    priceRange?: string;
+    specialty?: string | null;
+    hoursWeekdays?: string | null;
+    hoursWeekends?: string | null;
+    hoursByDay?: Record<string, string | null> | null;
+    phone?: string | null;
+    instagram?: string | null;
+    photos?: string[];
+    isVerified?: boolean;
+  },
+): Promise<void> {
+  if (!isDbConfigured()) {
+    throw new Error("updatePlace requiere DATABASE_URL");
+  }
+
+  const db = getDb();
+  const updates: Partial<NewDbPlace> & { updatedAt: Date } = { updatedAt: new Date() };
+
+  if (patch.name !== undefined) updates.name = patch.name;
+  if (patch.comunaLabel !== undefined) updates.comunaLabel = patch.comunaLabel;
+  if (patch.region !== undefined) updates.region = patch.region;
+  if (patch.address !== undefined) updates.address = patch.address;
+  if (patch.lat !== undefined) updates.lat = patch.lat.toString();
+  if (patch.lng !== undefined) updates.lng = patch.lng.toString();
+  if (patch.cuisines !== undefined) updates.cuisines = patch.cuisines;
+  if (patch.priceRange !== undefined) updates.priceRange = patch.priceRange;
+  if (patch.specialty !== undefined) updates.specialty = patch.specialty;
+  if (patch.hoursWeekdays !== undefined) updates.hoursWeekdays = patch.hoursWeekdays;
+  if (patch.hoursWeekends !== undefined) updates.hoursWeekends = patch.hoursWeekends;
+  if (patch.hoursByDay !== undefined) updates.hoursByDay = patch.hoursByDay;
+  if (patch.phone !== undefined) updates.phone = patch.phone;
+  if (patch.instagram !== undefined) updates.instagram = patch.instagram;
+  if (patch.photos !== undefined) updates.photos = patch.photos;
+  if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
+
+  await db.update(places).set(updates).where(eq(places.id, placeId));
 }
 
 /**

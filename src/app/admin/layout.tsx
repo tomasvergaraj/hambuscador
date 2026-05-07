@@ -37,7 +37,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           href="/admin/moderacion"
           className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
         >
-          locales pendientes
+          pendientes
+        </Link>
+        <Link
+          href="/admin/places"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          locales
         </Link>
         <Link
           href="/admin/resenas"
