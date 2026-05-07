@@ -1,3 +1,4 @@
+import { tokenizeQuery, normalizeForSearch } from "@/lib/search";
 import type { Place, Review } from "@/types/place";
 
 // ============================================================================
@@ -151,9 +152,9 @@ export function searchPlacesMock(
     userCoords?: { lat: number; lng: number };
   },
 ): { items: Place[]; usedFuzzy: boolean } {
-  const q = query.toLowerCase().trim();
+  const { groups, phrase } = tokenizeQuery(query);
 
-  // 1. Filtros duros.
+  // 1. Filtros duros (no afectados por query).
   let result = MOCK_PLACES.filter((p) => {
     const matchesCuisine =
       !filters?.cuisines?.length ||
@@ -166,16 +167,31 @@ export function searchPlacesMock(
     return matchesCuisine && matchesPrice && matchesComuna && matchesOpen;
   });
 
-  // 2. Si hay query, scoring multi-campo igual que el SQL de prod.
-  if (q) {
-    const scored = result
-      .map((p) => ({ p, score: scorePlaceMock(p, q) }))
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score || b.p.rating - a.p.rating);
-    return { items: scored.map((s) => s.p), usedFuzzy: false };
+  // 2. Grupos: cada grupo (con sus alternativas OR) tiene que matchear al
+  //    menos un campo. AND entre grupos.
+  if (groups.length > 0) {
+    const matched = result
+      .map((p) => {
+        const fields = mockFields(p);
+        const allGroupsMatch = groups.every((alts) =>
+          alts.some((t) => anyFieldHas(fields, t)),
+        );
+        if (!allGroupsMatch) return null;
+        let score = groups.reduce(
+          (sum, alts) =>
+            sum + Math.max(...alts.map((t) => tokenScoreMock(fields, t))),
+          0,
+        );
+        if (phrase.length >= 4 && fields.name.includes(phrase)) score += 5;
+        return { p, score };
+      })
+      .filter((x): x is { p: Place; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score || bayesMock(b.p) - bayesMock(a.p));
+
+    return { items: matched.map((x) => x.p), usedFuzzy: false };
   }
 
-  // 3. Sort default cuando no hay query.
+  // 3. Sin tokens útiles: sort default sobre los filtrados.
   if (filters?.sort === "distance" && filters.userCoords) {
     const { lat, lng } = filters.userCoords;
     result = [...result].sort((a, b) => {
@@ -192,19 +208,47 @@ export function searchPlacesMock(
   return { items: result, usedFuzzy: false };
 }
 
-function scorePlaceMock(p: Place, q: string): number {
-  const name = p.name.toLowerCase();
-  const comuna = p.comunaLabel.toLowerCase();
-  const specialty = (p.specialty ?? "").toLowerCase();
-  const address = p.address.toLowerCase();
-  let score = 0;
-  if (name.startsWith(q)) score += 5;
-  if (name.includes(q)) score += 3;
-  if (p.cuisines.some((c) => c.toLowerCase().includes(q))) score += 2;
-  if (specialty.includes(q)) score += 1.5;
-  if (comuna.includes(q)) score += 1;
-  if (address.includes(q)) score += 0.5;
-  return score;
+type MockFields = {
+  name: string;
+  comuna: string;
+  specialty: string;
+  address: string;
+  cuisines: string[];
+};
+
+function mockFields(p: Place): MockFields {
+  return {
+    name: normalizeForSearch(p.name),
+    comuna: normalizeForSearch(p.comunaLabel),
+    specialty: normalizeForSearch(p.specialty ?? ""),
+    address: normalizeForSearch(p.address),
+    cuisines: p.cuisines.map((c) => normalizeForSearch(c)),
+  };
+}
+
+function anyFieldHas(f: MockFields, token: string): boolean {
+  return (
+    f.name.includes(token) ||
+    f.comuna.includes(token) ||
+    f.specialty.includes(token) ||
+    f.address.includes(token) ||
+    f.cuisines.some((c) => c.includes(token))
+  );
+}
+
+function tokenScoreMock(f: MockFields, t: string): number {
+  // Mismo "max field weight" que el SQL.
+  if (f.name.startsWith(t)) return 5;
+  if (f.name.includes(t)) return 3;
+  if (f.cuisines.some((c) => c.includes(t))) return 2;
+  if (f.specialty.includes(t)) return 1.5;
+  if (f.comuna.includes(t)) return 1;
+  if (f.address.includes(t)) return 0.5;
+  return 0;
+}
+
+function bayesMock(p: Place): number {
+  return (p.reviewCount * p.rating + 5 * 4.0) / (p.reviewCount + 5);
 }
 
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {

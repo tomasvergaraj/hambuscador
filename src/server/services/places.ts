@@ -1,6 +1,7 @@
-import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CuisineId, PriceRangeId } from "@/lib/constants";
+import { tokenizeQuery } from "@/lib/search";
 import { getDb, isDbConfigured } from "@/server/db/client";
 import { places, type DbPlace, type NewDbPlace } from "@/server/db/schema";
 import type { Place } from "@/types/place";
@@ -163,20 +164,26 @@ export type SearchResult = {
 /**
  * Búsqueda full-text + filtros. Si la query es vacía, lista los aprobados.
  *
- * **Relevancia**: cuando hay `query`, se calcula un `score` por fila que pondera:
- *   - prefix match en name → +5
- *   - substring match en name → +3 (acumulable con prefix)
- *   - cuisine match → +2
- *   - specialty match → +1.5
- *   - comuna_label match → +1
- *   - address match → +0.5
- * Se ordena por `score DESC, rating_avg DESC`. Si la búsqueda exacta retorna 0
- * filas (y no hay filtros que expliquen el vacío) probamos fuzzy con `pg_trgm`
- * (`similarity(name, q) > 0.3`).
+ * **Pipeline de relevancia** (cuando hay `query`):
+ *   1. `tokenizeQuery` baja a ASCII lowercase, separa tokens, descarta stop
+ *      words ("de la y en…") y expande sinónimos (veggie → vegetariana, etc).
+ *   2. WHERE: cada token tiene que matchear AL MENOS un campo
+ *      (name / cuisines / specialty / comuna_label / address). AND entre tokens.
+ *      "smash providencia" exige BOTH smash AND providencia presentes.
+ *   3. SCORE por fila = sumatoria sobre tokens de `max field weight matched`:
+ *      prefix-name=5, name=3, cuisine=2, specialty=1.5, comuna=1, address=0.5.
+ *      Bonus +5 si el `phrase` completo está como substring del nombre.
+ *   4. TIEBREAK: bayesian rating (suaviza outliers de 5★ con 1 reseña),
+ *      después distancia si hay coords, después rating raw.
+ *
+ * Toda la comparación corre sobre `f_unaccent(lower(...))` así "ñunoa",
+ * "Ñuñoa" y "nunoa" son equivalentes — clave para mobile/Chile.
+ *
+ * Si el strict pass devuelve 0, fallback a fuzzy con `pg_trgm.similarity()`
+ * sobre la versión normalizada (también accent-insensitive).
  *
  * `openNow` se filtra en JS porque depende de la hora actual (TZ Chile) y
- * de `hours_by_day`/legacy hours; replicarlo en SQL no compensa al volumen
- * actual. `sort=distance` requiere `userCoords`; sin coords cae a `rating`.
+ * de `hours_by_day`/legacy hours.
  */
 export async function searchPlaces(opts: {
   query?: string;
@@ -210,7 +217,7 @@ export async function searchPlaces(opts: {
     limit = 30,
   } = opts;
   const db = getDb();
-  const trimmed = query?.trim() ?? "";
+  const { groups, phrase } = tokenizeQuery(query ?? "");
 
   const baseConditions = [eq(places.moderationStatus, "approved")];
 
@@ -263,47 +270,79 @@ export async function searchPlaces(opts: {
   let mapped: Place[];
   let usedFuzzy = false;
 
-  if (trimmed.length === 0) {
-    // Sin query: solo aplicar filtros + sort por defecto.
+  // Bayesian rating: prior C=5 con global avg 4.0. Pulla 5★ con 1 reseña
+  // hacia el centro; un 4.7★ con 200 reseñas se queda muy cerca de 4.7.
+  const bayesRating = sql<number>`(
+    (COALESCE(${places.reviewCount}, 0)::numeric * COALESCE(${places.ratingAvg}, 4.0) + 5 * 4.0)
+    / (COALESCE(${places.reviewCount}, 0) + 5)
+  )`;
+
+  if (groups.length === 0) {
+    // Sin tokens útiles (query vacía, o solo stop-words): filtros + sort default.
     mapped = await runQuery(baseConditions);
   } else {
-    // Con query: scoring multi-campo. Match contra name, cuisines (unnest),
-    // specialty, comuna_label, address.
-    const like = `%${trimmed}%`;
-    const prefix = `${trimmed}%`;
-    const matchClause = or(
-      ilike(places.name, like),
-      ilike(places.comunaLabel, like),
-      ilike(places.specialty, like),
-      ilike(places.address, like),
-      sql`EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE c ILIKE ${like})`,
+    // Helper: clause de match para UN término en CUALQUIERA de los campos.
+    const matchClauseFor = (t: string) => {
+      const like = `%${t}%`;
+      return sql`(
+        f_unaccent(lower(${places.name})) LIKE ${like} OR
+        f_unaccent(lower(${places.comunaLabel})) LIKE ${like} OR
+        f_unaccent(lower(COALESCE(${places.specialty}, ''))) LIKE ${like} OR
+        f_unaccent(lower(${places.address})) LIKE ${like} OR
+        EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE f_unaccent(lower(c)) LIKE ${like})
+      )`;
+    };
+
+    // Cada grupo: OR entre alternativas (token + sinónimos). Grupos: AND.
+    const groupWhereClauses = groups.map((alts) =>
+      sql`(${sql.join(alts.map(matchClauseFor), sql` OR `)})`,
     );
-    const conditions = matchClause
-      ? [...baseConditions, matchClause]
-      : baseConditions;
-    const score = sql<number>`(
-      (CASE WHEN ${places.name} ILIKE ${prefix} THEN 5 ELSE 0 END) +
-      (CASE WHEN ${places.name} ILIKE ${like} THEN 3 ELSE 0 END) +
-      (CASE WHEN EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE c ILIKE ${like}) THEN 2 ELSE 0 END) +
-      (CASE WHEN ${places.specialty} ILIKE ${like} THEN 1.5 ELSE 0 END) +
-      (CASE WHEN ${places.comunaLabel} ILIKE ${like} THEN 1 ELSE 0 END) +
-      (CASE WHEN ${places.address} ILIKE ${like} THEN 0.5 ELSE 0 END)
-    )`;
-    // Score-based sort siempre tiene prioridad sobre el sort default cuando
-    // hay query — la relevancia debe mandar. Tie-break por rating, después
-    // por distancia si hay coords.
+    const conditions = [
+      ...baseConditions,
+      sql`(${sql.join(groupWhereClauses, sql` AND `)})`,
+    ];
+
+    // Score por término individual.
+    const scoreFor = (t: string) => {
+      const like = `%${t}%`;
+      const prefix = `${t}%`;
+      return sql`GREATEST(
+        CASE WHEN f_unaccent(lower(${places.name})) LIKE ${prefix} THEN 5.0 ELSE 0 END,
+        CASE WHEN f_unaccent(lower(${places.name})) LIKE ${like} THEN 3.0 ELSE 0 END,
+        CASE WHEN EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE f_unaccent(lower(c)) LIKE ${like}) THEN 2.0 ELSE 0 END,
+        CASE WHEN f_unaccent(lower(COALESCE(${places.specialty}, ''))) LIKE ${like} THEN 1.5 ELSE 0 END,
+        CASE WHEN f_unaccent(lower(${places.comunaLabel})) LIKE ${like} THEN 1.0 ELSE 0 END,
+        CASE WHEN f_unaccent(lower(${places.address})) LIKE ${like} THEN 0.5 ELSE 0 END
+      )`;
+    };
+    // Por grupo: max score entre alternativas (sinónimos no se suman, son alternativas).
+    const scoreTerms = groups.map((alts) =>
+      alts.length === 1
+        ? scoreFor(alts[0]!)
+        : sql`GREATEST(${sql.join(alts.map(scoreFor), sql`, `)})`,
+    );
+    // Phrase bonus: el phrase normalizado completo dentro del nombre = +5.
+    // Solo cuando vale la pena (≥ 4 chars; sino "bu" matchearía cualquier cosa).
+    const phraseBonus =
+      phrase.length >= 4
+        ? sql`(CASE WHEN f_unaccent(lower(${places.name})) LIKE ${`%${phrase}%`} THEN 5.0 ELSE 0 END)`
+        : sql`0`;
+    const score = sql<number>`(${sql.join(scoreTerms, sql` + `)} + ${phraseBonus})`;
+
+    // Order: relevancia primero, después popularidad (bayes), después
+    // distancia si hay coords, después rating crudo.
     const orderBy =
       sort === "distance" && userCoords
-        ? sql`${score} DESC, distance_m ASC`
-        : sql`${score} DESC, rating_avg DESC NULLS LAST`;
+        ? sql`${score} DESC, ${bayesRating} DESC, distance_m ASC, rating_avg DESC NULLS LAST`
+        : sql`${score} DESC, ${bayesRating} DESC, rating_avg DESC NULLS LAST`;
     mapped = await runQuery(conditions, orderBy);
 
-    // Fallback fuzzy: si el strict search no devolvió nada Y la query tiene
-    // ≥ 3 chars (sino el ruido es alto), retry con similarity().
-    if (mapped.length === 0 && trimmed.length >= 3) {
-      const fuzzyClause = sql`similarity(${places.name}, ${trimmed}) > 0.3`;
+    // Fuzzy fallback: si strict da 0 y el phrase tiene ≥ 3 chars, retry con
+    // similarity sobre la versión normalizada (accent-insensitive).
+    if (mapped.length === 0 && phrase.length >= 3) {
+      const fuzzyClause = sql`similarity(f_unaccent(lower(${places.name})), ${phrase}) > 0.3`;
       const fuzzyConditions = [...baseConditions, fuzzyClause];
-      const fuzzyOrder = sql`similarity(${places.name}, ${trimmed}) DESC, rating_avg DESC NULLS LAST`;
+      const fuzzyOrder = sql`similarity(f_unaccent(lower(${places.name})), ${phrase}) DESC, ${bayesRating} DESC`;
       const fuzzy = await runQuery(fuzzyConditions, fuzzyOrder);
       if (fuzzy.length > 0) {
         mapped = fuzzy;
