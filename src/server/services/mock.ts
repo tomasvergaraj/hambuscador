@@ -140,15 +140,80 @@ export function getReviewsByPlaceIdMock(placeId: string): Review[] {
   return MOCK_REVIEWS.filter((r) => r.placeId === placeId);
 }
 
-export function searchPlacesMock(query: string, filters?: { cuisine?: string }): Place[] {
+export function searchPlacesMock(
+  query: string,
+  filters?: {
+    cuisines?: string[];
+    priceRanges?: string[];
+    comunaSlug?: string;
+    openNow?: boolean;
+    sort?: "rating" | "recent" | "distance";
+    userCoords?: { lat: number; lng: number };
+  },
+): { items: Place[]; usedFuzzy: boolean } {
   const q = query.toLowerCase().trim();
-  return MOCK_PLACES.filter((p) => {
-    const matchesQuery =
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      p.comunaLabel.toLowerCase().includes(q) ||
-      p.cuisines.some((c) => c.includes(q));
-    const matchesCuisine = !filters?.cuisine || p.cuisines.includes(filters.cuisine as never);
-    return matchesQuery && matchesCuisine;
+
+  // 1. Filtros duros.
+  let result = MOCK_PLACES.filter((p) => {
+    const matchesCuisine =
+      !filters?.cuisines?.length ||
+      p.cuisines.some((c) => filters.cuisines!.includes(c));
+    const matchesPrice =
+      !filters?.priceRanges?.length || filters.priceRanges.includes(p.priceRange);
+    const matchesComuna = !filters?.comunaSlug || p.comuna === filters.comunaSlug;
+    const matchesOpen =
+      !filters?.openNow || p.status === "open" || p.status === "closing-soon";
+    return matchesCuisine && matchesPrice && matchesComuna && matchesOpen;
   });
+
+  // 2. Si hay query, scoring multi-campo igual que el SQL de prod.
+  if (q) {
+    const scored = result
+      .map((p) => ({ p, score: scorePlaceMock(p, q) }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || b.p.rating - a.p.rating);
+    return { items: scored.map((s) => s.p), usedFuzzy: false };
+  }
+
+  // 3. Sort default cuando no hay query.
+  if (filters?.sort === "distance" && filters.userCoords) {
+    const { lat, lng } = filters.userCoords;
+    result = [...result].sort((a, b) => {
+      const da = haversineM(lat, lng, a.coords.lat, a.coords.lng);
+      const db = haversineM(lat, lng, b.coords.lat, b.coords.lng);
+      return da - db;
+    });
+  } else if (filters?.sort === "recent") {
+    result = [...result];
+  } else {
+    result = [...result].sort((a, b) => b.rating - a.rating);
+  }
+
+  return { items: result, usedFuzzy: false };
+}
+
+function scorePlaceMock(p: Place, q: string): number {
+  const name = p.name.toLowerCase();
+  const comuna = p.comunaLabel.toLowerCase();
+  const specialty = (p.specialty ?? "").toLowerCase();
+  const address = p.address.toLowerCase();
+  let score = 0;
+  if (name.startsWith(q)) score += 5;
+  if (name.includes(q)) score += 3;
+  if (p.cuisines.some((c) => c.toLowerCase().includes(q))) score += 2;
+  if (specialty.includes(q)) score += 1.5;
+  if (comuna.includes(q)) score += 1;
+  if (address.includes(q)) score += 0.5;
+  return score;
+}
+
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }

@@ -3,17 +3,20 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
+import { LiveSearchInput } from "@/components/place/live-search-input";
 import { PlaceCard } from "@/components/place/place-card";
 import { PlacesMap } from "@/components/place/places-map";
-import { Chip } from "@/components/ui/chip";
-import { SearchBar } from "@/components/ui/search-bar";
+import { SearchFilters } from "@/components/place/search-filters";
 import { searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 
 type SearchParams = {
   q?: string;
   vista?: "lista" | "mapa";
-  cuisine?: string;
+  cocina?: string;
+  precio?: string;
+  abierto?: string;
+  orden?: string;
 };
 
 export const metadata = {
@@ -30,28 +33,53 @@ export default async function BuscarPage({
   const query = sp.q ?? "";
   const view = sp.vista ?? "lista";
 
-  const [results, cookieStore] = await Promise.all([
-    searchPlaces(query, { cuisine: sp.cuisine }),
-    cookies(),
-  ]);
+  const cuisines = csv(sp.cocina);
+  const priceRanges = csv(sp.precio);
+  const openNow = sp.abierto === "1";
+  const explicitSort = parseSort(sp.orden); // null si el user no eligió uno
+
+  const cookieStore = await cookies();
   const userCoords = parseGeoCookie(cookieStore.get(GEO_COOKIE_NAME)?.value);
+
+  // Sort default inteligente: si el usuario tiene coords y NO eligió orden,
+  // ordenamos por distancia. Sin coords → rating. Si eligió explícito, respetamos.
+  const sort: "rating" | "recent" | "distance" =
+    explicitSort ?? (userCoords ? "distance" : "rating");
+
+  // userCoords solo entra al cache key cuando sort=distance (sino fragmenta
+  // la cache por usuario sin cambiar el resultado).
+  const effectiveSort = sort === "distance" && !userCoords ? "rating" : sort;
+  const { items: results, usedFuzzy } = await searchPlaces(query, {
+    cuisines: cuisines.length ? cuisines : undefined,
+    priceRanges: priceRanges.length ? priceRanges : undefined,
+    openNow: openNow || undefined,
+    sort: effectiveSort,
+    userCoords: effectiveSort === "distance" ? (userCoords ?? undefined) : undefined,
+  });
+
+  // Agrupación: solo cuando no hay query ni filtros ni sort explícito.
+  // Con coords → bandas de distancia; sin coords → por comuna.
+  const hasFilters =
+    cuisines.length > 0 || priceRanges.length > 0 || openNow || Boolean(query);
+  const showGrouped = !hasFilters && !explicitSort;
+  const groups = showGrouped
+    ? userCoords
+      ? groupByDistanceBand(results)
+      : groupByComuna(results)
+    : null;
 
   // ============================================================================
   // Vista mapa: layout fullscreen con todos los controles flotando encima.
-  // El mapa es la capa de fondo; header, toggle y filtros viven en posición
-  // absoluta con backdrop-blur para legibilidad sobre el mapa.
   // ============================================================================
   if (view === "mapa") {
     return (
       <div className="fixed inset-0 flex flex-col overflow-hidden">
-        {/* Capa mapa — ocupa todo el viewport debajo de la nav inferior */}
         <PlacesMap
           places={results}
           userCoords={userCoords ?? undefined}
           className="map-fullscreen absolute inset-0 z-0"
         />
 
-        {/* Top overlay: search + toggle */}
         <div className="absolute top-0 left-0 right-0 z-10 pt-3 px-3 flex flex-col gap-2 pointer-events-none">
           <header className="flex items-center gap-2 pointer-events-auto">
             <Link
@@ -62,9 +90,9 @@ export default async function BuscarPage({
               <IconArrowLeft size={18} />
             </Link>
             <div className="flex-1">
-              <SearchBar
+              <LiveSearchInput
+                initialValue={query}
                 size="md"
-                defaultValue={query}
                 placeholder="busca por barrio o nombre"
               />
             </div>
@@ -72,24 +100,30 @@ export default async function BuscarPage({
 
           <div className="inline-flex w-full bg-white/95 backdrop-blur-sm border border-crema-edge rounded-full p-1 shadow pointer-events-auto">
             <Link
-              href={{ pathname: "/buscar", query: { ...sp, vista: undefined } }}
+              href={buildToggleHref(sp, "lista")}
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-[transform,colors] duration-150 active:scale-[0.97] text-carbon hover:bg-crema-edge/40"
             >
               <IconList size={14} aria-hidden="true" /> lista
             </Link>
             <Link
-              href={{ pathname: "/buscar", query: { ...sp, vista: "mapa" } }}
+              href={buildToggleHref(sp, "mapa")}
               aria-current="page"
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm bg-carbon text-crema font-medium"
             >
               <IconMap size={14} aria-hidden="true" /> mapa
             </Link>
           </div>
-        </div>
 
-        {/* Bottom: contador flotante encima de la nav */}
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 bg-carbon/90 backdrop-blur-sm text-crema text-xs font-medium px-3 py-1.5 rounded-full shadow">
-          {results.length} {results.length === 1 ? "resultado" : "resultados"}
+          {/* Filtros sobre el mapa: solo strip de chips dentro del card, sin
+              meta (el contador va flotando abajo, sort no se usa en mapa). */}
+          <div className="pointer-events-auto bg-white/95 backdrop-blur-sm border border-crema-edge rounded-2xl px-3 py-2 shadow">
+            <SearchFilters
+              hasUserCoords={Boolean(userCoords)}
+              resultsCount={results.length}
+              bleed={false}
+              hideMeta
+            />
+          </div>
         </div>
 
         <BottomNav />
@@ -98,11 +132,10 @@ export default async function BuscarPage({
   }
 
   // ============================================================================
-  // Vista lista: layout original
+  // Vista lista
   // ============================================================================
   return (
     <div className="flex flex-col min-h-screen pb-24">
-      {/* Top row: back + search */}
       <header className="flex items-center gap-2 px-4 pt-3 pb-2">
         <Link
           href="/"
@@ -112,22 +145,25 @@ export default async function BuscarPage({
           <IconArrowLeft size={18} />
         </Link>
         <div className="flex-1">
-          <SearchBar size="md" defaultValue={query} placeholder="busca por barrio o nombre" />
+          <LiveSearchInput
+            initialValue={query}
+            size="md"
+            placeholder="busca por barrio o nombre"
+          />
         </div>
       </header>
 
-      {/* View toggle (lista | mapa) */}
       <section className="px-4 pb-3 pt-1">
         <div className="inline-flex w-full bg-crema-deep border border-crema-edge rounded-full p-1">
           <Link
-            href={{ pathname: "/buscar", query: { ...sp, vista: undefined } }}
+            href={buildToggleHref(sp, "lista")}
             aria-current="page"
             className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm bg-carbon text-crema font-medium"
           >
             <IconList size={14} aria-hidden="true" /> lista
           </Link>
           <Link
-            href={{ pathname: "/buscar", query: { ...sp, vista: "mapa" } }}
+            href={buildToggleHref(sp, "mapa")}
             className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-[transform,colors] duration-150 active:scale-[0.97] text-carbon hover:bg-crema-edge/40"
           >
             <IconMap size={14} aria-hidden="true" /> mapa
@@ -135,28 +171,34 @@ export default async function BuscarPage({
         </div>
       </section>
 
-      {/* Active filters */}
-      <section className="px-4 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
-        {query && <Chip active>{query}</Chip>}
-        <Chip>abierto</Chip>
-        <Chip>$$ o menos</Chip>
-        <Chip>smash</Chip>
+      <section className="px-4 pb-3">
+        <SearchFilters hasUserCoords={Boolean(userCoords)} resultsCount={results.length} />
       </section>
 
-      {/* Results count + sort */}
-      <section className="px-4 pb-3 flex items-center justify-between">
-        <span className="text-xs text-carbon font-medium">
-          {results.length} {results.length === 1 ? "resultado" : "resultados"}
-        </span>
-        <button type="button" className="text-xs text-tinta-suave">
-          mejor calificadas ▾
-        </button>
-      </section>
+      {usedFuzzy && query && (
+        <section className="px-4 pb-2">
+          <div className="rounded-xl bg-mostaza/10 border border-mostaza/30 px-3 py-2 text-xs text-carbon">
+            no encontramos <span className="font-semibold">«{query}»</span> exacto.
+            estos son los más parecidos.
+          </div>
+        </section>
+      )}
 
-      {/* Results */}
       <section className="px-4 flex flex-col gap-2 pb-6">
         {results.length === 0 ? (
-          <EmptyState />
+          <EmptyState query={query} hasFilters={hasFilters} />
+        ) : groups ? (
+          groups.map((g) => (
+            <div key={g.key} className="flex flex-col gap-2">
+              <h3 className="font-display font-semibold text-sm text-carbon mt-2 first:mt-0">
+                {g.label}{" "}
+                <span className="text-bronceado font-normal text-xs">({g.places.length})</span>
+              </h3>
+              {g.places.map((place) => (
+                <PlaceCard key={place.id} place={place} variant="compact" />
+              ))}
+            </div>
+          ))
         ) : (
           results.map((place) => (
             <PlaceCard key={place.id} place={place} variant="compact" />
@@ -170,11 +212,96 @@ export default async function BuscarPage({
   );
 }
 
-function EmptyState() {
+function EmptyState({ query, hasFilters }: { query: string; hasFilters: boolean }) {
+  // Si hay filtros activos, ofrecemos limpiarlos preservando solo el texto.
+  const clearHref = query ? `/buscar?q=${encodeURIComponent(query)}` : "/buscar";
   return (
     <div className="text-center py-12 text-tinta-suave">
-      <p className="font-display font-semibold text-base text-carbon">no encontramos picás</p>
-      <p className="text-xs mt-1">prueba con otros filtros o agrega la que falta</p>
+      <p className="font-display font-semibold text-base text-carbon">
+        {query ? `no encontramos «${query}»` : "no encontramos picás"}
+      </p>
+      <p className="text-xs mt-1">
+        {hasFilters
+          ? "tu búsqueda es muy específica. prueba quitar filtros o agrega la picá que falta."
+          : "agrega la picá que falta y aparecerá apenas la revisemos"}
+      </p>
+      <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+        {hasFilters && (
+          <Link
+            href={clearHref}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-crema-edge bg-white text-xs text-carbon hover:bg-crema-deep transition-colors"
+          >
+            quitar filtros
+          </Link>
+        )}
+        <Link
+          href="/agregar"
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-mostaza text-carbon text-xs font-medium hover:bg-mostaza-deep transition-colors"
+        >
+          agregar picá
+        </Link>
+      </div>
     </div>
   );
+}
+
+function csv(value: string | undefined): string[] {
+  if (!value) return [];
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function parseSort(value: string | undefined): "rating" | "recent" | "distance" | null {
+  if (value === "rating" || value === "recent" || value === "distance") return value;
+  return null;
+}
+
+// ============================================================================
+// Helpers de agrupación
+// ============================================================================
+
+type Group = { key: string; label: string; places: import("@/types/place").Place[] };
+
+function groupByDistanceBand(places: import("@/types/place").Place[]): Group[] {
+  const buckets: Record<string, Group> = {
+    near: { key: "near", label: "a pasos · menos de 1 km", places: [] },
+    mid: { key: "mid", label: "vale el viaje · 1 — 5 km", places: [] },
+    far: { key: "far", label: "si pasas por ahí · más de 5 km", places: [] },
+    unknown: { key: "unknown", label: "más opciones", places: [] },
+  };
+  for (const p of places) {
+    const d = p.distanceM;
+    if (d === undefined) buckets.unknown!.places.push(p);
+    else if (d < 1000) buckets.near!.places.push(p);
+    else if (d < 5000) buckets.mid!.places.push(p);
+    else buckets.far!.places.push(p);
+  }
+  return [buckets.near!, buckets.mid!, buckets.far!, buckets.unknown!].filter(
+    (g) => g.places.length > 0,
+  );
+}
+
+function groupByComuna(places: import("@/types/place").Place[]): Group[] {
+  const map = new Map<string, Group>();
+  for (const p of places) {
+    const key = p.comuna;
+    if (!map.has(key)) {
+      map.set(key, { key, label: p.comunaLabel, places: [] });
+    }
+    map.get(key)!.places.push(p);
+  }
+  // Orden por cantidad descendente; comunas con más locales arriba.
+  return [...map.values()].sort((a, b) => b.places.length - a.places.length);
+}
+
+function buildToggleHref(sp: SearchParams, vista: "lista" | "mapa") {
+  // Mantiene q + filtros, cambia solo `vista`. Para `lista` omitimos `vista`
+  // (default), para `mapa` lo seteamos.
+  const next: Record<string, string> = {};
+  if (sp.q) next.q = sp.q;
+  if (sp.cocina) next.cocina = sp.cocina;
+  if (sp.precio) next.precio = sp.precio;
+  if (sp.abierto) next.abierto = sp.abierto;
+  if (sp.orden) next.orden = sp.orden;
+  if (vista === "mapa") next.vista = "mapa";
+  return { pathname: "/buscar", query: next };
 }

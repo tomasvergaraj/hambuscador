@@ -7,6 +7,28 @@ import { useEffect, useRef } from "react";
 
 import type { Place } from "@/types/place";
 
+type Feature = {
+  type: "Feature";
+  properties: { id: string; name: string; comuna: string; href: string; rating: number };
+  geometry: { type: "Point"; coordinates: [number, number] };
+};
+
+function buildFeatures(places: Place[]): Feature[] {
+  return places
+    .filter((p) => Number.isFinite(p.coords.lat) && Number.isFinite(p.coords.lng))
+    .map((p) => ({
+      type: "Feature" as const,
+      properties: {
+        id: p.id,
+        name: p.name,
+        comuna: p.comunaLabel,
+        href: `/${p.comuna}/${p.slug}`,
+        rating: p.rating,
+      },
+      geometry: { type: "Point" as const, coordinates: [p.coords.lng, p.coords.lat] },
+    }));
+}
+
 // ============================================================================
 // Tile source — dos modos:
 // 1. PMTiles (recomendado prod): seteá NEXT_PUBLIC_PMTILES_URL apuntando a un
@@ -43,6 +65,12 @@ type Props = {
 export function PlacesMap({ places, userCoords, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("maplibre-gl").Map | null>(null);
+  const sourceReadyRef = useRef(false);
+  const didInitialFitRef = useRef(false);
+  // Snapshot de places usado dentro del init effect — evita capturar la
+  // referencia "vieja" si el effect arranca antes que el primer update.
+  const placesRef = useRef(places);
+  placesRef.current = places;
 
   // Click del botón "saltar a mi ubicación". Usa flyTo (interpolación suave)
   // y forzamos `essential: true` para que la animación corra incluso si el
@@ -58,6 +86,11 @@ export function PlacesMap({ places, userCoords, className }: Props) {
     });
   }
 
+  // ============================================================================
+  // EFFECT 1: init-once. Crea el mapa una sola vez por montaje. NO depende de
+  // `places` — los pines se actualizan en effect 2. Esto evita que cada cambio
+  // de filtro tire el mapa y lo reconstruya (parpadeo + flicker de tiles).
+  // ============================================================================
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -70,7 +103,6 @@ export function PlacesMap({ places, userCoords, className }: Props) {
 
       if (aborted || !containerRef.current) return;
 
-      // Registrar protocolo PMTiles solo si vamos a usarlo
       if (USE_PMTILES && !pmtilesRegistered) {
         const { Protocol } = await import("pmtiles");
         const protocol = new Protocol();
@@ -112,31 +144,13 @@ export function PlacesMap({ places, userCoords, className }: Props) {
             layers: [{ id: "osm", type: "raster", source: "osm" }],
           };
 
-      const features = places
-        .filter(
-          (p) =>
-            Number.isFinite(p.coords.lat) && Number.isFinite(p.coords.lng),
-        )
-        .map((p) => ({
-          type: "Feature" as const,
-          properties: {
-            id: p.id,
-            name: p.name,
-            comuna: p.comunaLabel,
-            href: `/${p.comuna}/${p.slug}`,
-            rating: p.rating,
-          },
-          geometry: {
-            type: "Point" as const,
-            coordinates: [p.coords.lng, p.coords.lat],
-          },
-        }));
+      const initialFeatures = buildFeatures(placesRef.current);
 
       // Centro inicial: prioridad usuario > primer pin > Chile
       const initialCenter: [number, number] = userCoords
         ? [userCoords.lng, userCoords.lat]
-        : (features[0]?.geometry.coordinates as [number, number]) ?? CHILE_CENTER;
-      const initialZoom = userCoords ? 14 : features.length > 0 ? 12 : 5;
+        : (initialFeatures[0]?.geometry.coordinates as [number, number]) ?? CHILE_CENTER;
+      const initialZoom = userCoords ? 14 : initialFeatures.length > 0 ? 12 : 5;
 
       map = new maplibregl.Map({
         container: containerRef.current,
@@ -194,11 +208,12 @@ export function PlacesMap({ places, userCoords, className }: Props) {
 
         map.addSource("places", {
           type: "geojson",
-          data: { type: "FeatureCollection", features },
+          data: { type: "FeatureCollection", features: initialFeatures },
           cluster: true,
           clusterRadius: 50,
           clusterMaxZoom: 14,
         });
+        sourceReadyRef.current = true;
 
         map.addLayer({
           id: "clusters",
@@ -321,17 +336,20 @@ export function PlacesMap({ places, userCoords, className }: Props) {
         }
 
         // Si tenemos userCoords ya centramos al construir el map, no hacemos
-        // fitBounds. Si no, encuadramos los pins. Saltamos fitBounds cuando
-        // el canvas está vacío (sino MapLibre tira "cannot fit within canvas").
+        // fitBounds. Si no, encuadramos los pins iniciales una sola vez.
+        // Cambios de filtros NO refitean (sería disruptivo: el usuario perdió
+        // el pan/zoom que tenía). Para "centrar en resultados" tendría que
+        // existir un botón explícito.
         const canvas = map.getCanvas();
         const hasCanvasSize = canvas.width > 0 && canvas.height > 0;
-        if (!userCoords && features.length > 1 && hasCanvasSize) {
+        if (!userCoords && initialFeatures.length > 1 && hasCanvasSize && !didInitialFitRef.current) {
           const bounds = new maplibregl.LngLatBounds();
-          for (const f of features) {
+          for (const f of initialFeatures) {
             bounds.extend(f.geometry.coordinates as [number, number]);
           }
           try {
             map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 0 });
+            didInitialFitRef.current = true;
           } catch {
             // Defensivo: si igual el canvas estaba en transición, ignoramos
           }
@@ -346,9 +364,35 @@ export function PlacesMap({ places, userCoords, className }: Props) {
       map?.remove();
       map = null;
       mapRef.current = null;
+      sourceReadyRef.current = false;
+      didInitialFitRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places, userCoords?.lat, userCoords?.lng]);
+  }, [userCoords?.lat, userCoords?.lng]);
+
+  // ============================================================================
+  // EFFECT 2: pins-update. Cada vez que cambia `places` (filtros, búsqueda),
+  // sólo actualiza el GeoJSON source. El map instance + tiles + viewport se
+  // mantienen — sin parpadeo.
+  // ============================================================================
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const features = buildFeatures(places);
+    const apply = () => {
+      const source = map.getSource("places") as
+        | import("maplibre-gl").GeoJSONSource
+        | undefined;
+      if (!source) return;
+      source.setData({ type: "FeatureCollection", features });
+    };
+    if (sourceReadyRef.current) {
+      apply();
+    } else {
+      // El init aún no terminó de instalar la source. Esperamos al load del map.
+      map.once("load", apply);
+    }
+  }, [places]);
 
   // Si nos pasan className, asumimos que el padre controla el posicionamiento
   // (caso fullscreen). Sino, usamos el wrapper redondeado embebido.

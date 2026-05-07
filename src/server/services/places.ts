@@ -1,4 +1,4 @@
-import { and, eq, ilike, or, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import type { CuisineId, PriceRangeId } from "@/lib/constants";
 import { getDb, isDbConfigured } from "@/server/db/client";
@@ -153,48 +153,170 @@ export async function getPlaceBySlug(comunaSlug: string, slug: string): Promise<
   return row ? dbPlaceToUi(row) : null;
 }
 
+export type SearchResult = {
+  items: Place[];
+  /** Si true, hicimos fallback a búsqueda fuzzy (similarity > 0.3) porque
+   *  la búsqueda exacta no devolvió nada. La UI lo usa para mostrar un banner. */
+  usedFuzzy: boolean;
+};
+
 /**
  * Búsqueda full-text + filtros. Si la query es vacía, lista los aprobados.
+ *
+ * **Relevancia**: cuando hay `query`, se calcula un `score` por fila que pondera:
+ *   - prefix match en name → +5
+ *   - substring match en name → +3 (acumulable con prefix)
+ *   - cuisine match → +2
+ *   - specialty match → +1.5
+ *   - comuna_label match → +1
+ *   - address match → +0.5
+ * Se ordena por `score DESC, rating_avg DESC`. Si la búsqueda exacta retorna 0
+ * filas (y no hay filtros que expliquen el vacío) probamos fuzzy con `pg_trgm`
+ * (`similarity(name, q) > 0.3`).
+ *
+ * `openNow` se filtra en JS porque depende de la hora actual (TZ Chile) y
+ * de `hours_by_day`/legacy hours; replicarlo en SQL no compensa al volumen
+ * actual. `sort=distance` requiere `userCoords`; sin coords cae a `rating`.
  */
 export async function searchPlaces(opts: {
   query?: string;
   comunaSlug?: string;
-  cuisine?: string;
+  cuisines?: string[];
+  priceRanges?: string[];
+  openNow?: boolean;
+  sort?: "rating" | "recent" | "distance";
+  userCoords?: { lat: number; lng: number };
   limit?: number;
-}): Promise<Place[]> {
+}): Promise<SearchResult> {
   if (!isDbConfigured()) {
-    return searchPlacesMock(opts.query ?? "", { cuisine: opts.cuisine });
+    return searchPlacesMock(opts.query ?? "", {
+      cuisines: opts.cuisines,
+      priceRanges: opts.priceRanges,
+      comunaSlug: opts.comunaSlug,
+      openNow: opts.openNow,
+      sort: opts.sort,
+      userCoords: opts.userCoords,
+    });
   }
 
-  const { query, comunaSlug, cuisine, limit = 30 } = opts;
+  const {
+    query,
+    comunaSlug,
+    cuisines,
+    priceRanges,
+    openNow,
+    sort = "rating",
+    userCoords,
+    limit = 30,
+  } = opts;
   const db = getDb();
+  const trimmed = query?.trim() ?? "";
 
-  const conditions = [eq(places.moderationStatus, "approved")];
+  const baseConditions = [eq(places.moderationStatus, "approved")];
 
-  if (query && query.trim().length > 0) {
-    const q = `%${query.trim()}%`;
-    // ILIKE en name + comuna_label es suficiente para v1. En Fase 3
-    // podemos cambiar a similarity() del trigram index.
-    const orCondition = or(ilike(places.name, q), ilike(places.comunaLabel, q));
-    if (orCondition) conditions.push(orCondition);
+  if (comunaSlug) baseConditions.push(eq(places.comunaSlug, comunaSlug));
+
+  if (cuisines && cuisines.length > 0) {
+    const cuisineLiterals = sql.join(
+      cuisines.map((c) => sql`${c}`),
+      sql`, `,
+    );
+    baseConditions.push(sql`${places.cuisines} && ARRAY[${cuisineLiterals}]::text[]`);
   }
 
-  if (comunaSlug) {
-    conditions.push(eq(places.comunaSlug, comunaSlug));
+  if (priceRanges && priceRanges.length > 0) {
+    baseConditions.push(inArray(places.priceRange, priceRanges));
   }
 
-  if (cuisine) {
-    conditions.push(sql`${cuisine} = ANY(${places.cuisines})`);
+  // Helper para correr la query con un set de condiciones; encapsula el
+  // branch de distance vs rating/recent.
+  const runQuery = async (
+    conditions: typeof baseConditions,
+    customOrderBy?: ReturnType<typeof sql>,
+  ): Promise<Place[]> => {
+    if (sort === "distance" && userCoords) {
+      const rows = await db
+        .select({
+          place: places,
+          distanceM: sql<number>`ST_Distance(
+            ${places}.location,
+            ST_SetSRID(ST_MakePoint(${userCoords.lng}, ${userCoords.lat}), 4326)::geography
+          )`.as("distance_m"),
+        })
+        .from(places)
+        .where(and(...conditions))
+        .orderBy(customOrderBy ?? sql`distance_m ASC`)
+        .limit(limit);
+      return rows.map((r) => dbPlaceToUi(r.place, Number(r.distanceM)));
+    }
+    const fallbackOrder =
+      sort === "recent" ? sql`created_at DESC` : sql`rating_avg DESC NULLS LAST`;
+    const rows = await db
+      .select()
+      .from(places)
+      .where(and(...conditions))
+      .orderBy(customOrderBy ?? fallbackOrder)
+      .limit(limit);
+    return rows.map((row) => dbPlaceToUi(row));
+  };
+
+  let mapped: Place[];
+  let usedFuzzy = false;
+
+  if (trimmed.length === 0) {
+    // Sin query: solo aplicar filtros + sort por defecto.
+    mapped = await runQuery(baseConditions);
+  } else {
+    // Con query: scoring multi-campo. Match contra name, cuisines (unnest),
+    // specialty, comuna_label, address.
+    const like = `%${trimmed}%`;
+    const prefix = `${trimmed}%`;
+    const matchClause = or(
+      ilike(places.name, like),
+      ilike(places.comunaLabel, like),
+      ilike(places.specialty, like),
+      ilike(places.address, like),
+      sql`EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE c ILIKE ${like})`,
+    );
+    const conditions = matchClause
+      ? [...baseConditions, matchClause]
+      : baseConditions;
+    const score = sql<number>`(
+      (CASE WHEN ${places.name} ILIKE ${prefix} THEN 5 ELSE 0 END) +
+      (CASE WHEN ${places.name} ILIKE ${like} THEN 3 ELSE 0 END) +
+      (CASE WHEN EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE c ILIKE ${like}) THEN 2 ELSE 0 END) +
+      (CASE WHEN ${places.specialty} ILIKE ${like} THEN 1.5 ELSE 0 END) +
+      (CASE WHEN ${places.comunaLabel} ILIKE ${like} THEN 1 ELSE 0 END) +
+      (CASE WHEN ${places.address} ILIKE ${like} THEN 0.5 ELSE 0 END)
+    )`;
+    // Score-based sort siempre tiene prioridad sobre el sort default cuando
+    // hay query — la relevancia debe mandar. Tie-break por rating, después
+    // por distancia si hay coords.
+    const orderBy =
+      sort === "distance" && userCoords
+        ? sql`${score} DESC, distance_m ASC`
+        : sql`${score} DESC, rating_avg DESC NULLS LAST`;
+    mapped = await runQuery(conditions, orderBy);
+
+    // Fallback fuzzy: si el strict search no devolvió nada Y la query tiene
+    // ≥ 3 chars (sino el ruido es alto), retry con similarity().
+    if (mapped.length === 0 && trimmed.length >= 3) {
+      const fuzzyClause = sql`similarity(${places.name}, ${trimmed}) > 0.3`;
+      const fuzzyConditions = [...baseConditions, fuzzyClause];
+      const fuzzyOrder = sql`similarity(${places.name}, ${trimmed}) DESC, rating_avg DESC NULLS LAST`;
+      const fuzzy = await runQuery(fuzzyConditions, fuzzyOrder);
+      if (fuzzy.length > 0) {
+        mapped = fuzzy;
+        usedFuzzy = true;
+      }
+    }
   }
 
-  const rows = await db
-    .select()
-    .from(places)
-    .where(and(...conditions))
-    .orderBy(sql`rating_avg DESC NULLS LAST`)
-    .limit(limit);
+  if (openNow) {
+    mapped = mapped.filter((p) => p.status === "open" || p.status === "closing-soon");
+  }
 
-  return rows.map((row) => dbPlaceToUi(row));
+  return { items: mapped, usedFuzzy };
 }
 
 /**
@@ -301,6 +423,37 @@ export async function placeExists(name: string, comunaSlug: string): Promise<boo
     .limit(1);
 
   return Boolean(row);
+}
+
+/**
+ * Locales recién aprobados (últimos 14 días). Cierra el loop "alguien aporta
+ * → aparece en home". Si no hay DB, retorna mock vacío (mock no tiene timestamps).
+ */
+export async function getRecentlyApprovedPlaces(opts?: {
+  limit?: number;
+  daysBack?: number;
+}): Promise<Place[]> {
+  if (!isDbConfigured()) {
+    // Mock: marcamos los primeros 2 como "recientes" para que el home se vea poblado en demo.
+    const mock = await getPlacesNearby({ limit: opts?.limit ?? 4 });
+    return mock.slice(0, opts?.limit ?? 4);
+  }
+
+  const { limit = 4, daysBack = 14 } = opts ?? {};
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(places)
+    .where(
+      and(
+        eq(places.moderationStatus, "approved"),
+        sql`approved_at >= NOW() - INTERVAL '1 day' * ${daysBack}`,
+      ),
+    )
+    .orderBy(sql`approved_at DESC`)
+    .limit(limit);
+
+  return rows.map((row) => dbPlaceToUi(row));
 }
 
 /**

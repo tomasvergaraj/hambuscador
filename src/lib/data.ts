@@ -17,6 +17,7 @@ import { unstable_cache as cache } from "next/cache";
 import {
   getPlaceBySlug as getPlaceBySlugSvc,
   getPlacesNearby as getPlacesNearbySvc,
+  getRecentlyApprovedPlaces as getRecentlyApprovedPlacesSvc,
   searchPlaces as searchPlacesSvc,
 } from "@/server/services/places";
 import { getReviewsByPlaceId as getReviewsByPlaceIdSvc } from "@/server/services/reviews";
@@ -57,15 +58,45 @@ export const getPlaceBySlug = cache(
 );
 
 /**
- * Búsqueda con texto libre + filtros.
+ * Búsqueda con texto libre + filtros. Retorna `{ items, usedFuzzy }`.
  * Caching más corto porque el query space es grande.
  */
 export const searchPlaces = cache(
-  async (query: string, filters?: { cuisine?: string }) => {
-    return searchPlacesSvc({ query, cuisine: filters?.cuisine });
+  async (
+    query: string,
+    filters?: {
+      cuisines?: string[];
+      priceRanges?: string[];
+      comunaSlug?: string;
+      openNow?: boolean;
+      sort?: "rating" | "recent" | "distance";
+      userCoords?: { lat: number; lng: number };
+    },
+  ) => {
+    return searchPlacesSvc({
+      query,
+      cuisines: filters?.cuisines,
+      priceRanges: filters?.priceRanges,
+      comunaSlug: filters?.comunaSlug,
+      openNow: filters?.openNow,
+      sort: filters?.sort,
+      userCoords: filters?.userCoords,
+    });
   },
   ["places-search"],
   { revalidate: 30, tags: ["places"] },
+);
+
+/**
+ * Locales recién aprobados (default últimos 14d). Para sección "recién agregadas"
+ * en el home. Cache corta porque el set rota seguido.
+ */
+export const getRecentlyApprovedPlaces = cache(
+  async (limit?: number) => {
+    return getRecentlyApprovedPlacesSvc({ limit });
+  },
+  ["places-recent"],
+  { revalidate: 120, tags: ["places"] },
 );
 
 /**
