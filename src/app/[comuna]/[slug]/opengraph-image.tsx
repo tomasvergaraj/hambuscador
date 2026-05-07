@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 
 import { getPlaceBySlug } from "@/lib/data";
+import { BrandIconSvg, StarFilledSvg } from "@/lib/og-icons";
 
 // ============================================================================
 // OG image dinámico por local. Next.js convención: este archivo, al lado
@@ -164,7 +165,7 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
                 gap: 8,
               }}
             >
-              <span>⭐</span>
+              <StarFilledSvg size={26} color="#FFC107" />
               {place.rating.toFixed(1)}
               <span style={{ fontSize: 18, color: CREMA_DEEP, fontWeight: 600 }}>
                 · {place.reviewCount.toLocaleString("es-CL")}{" "}
@@ -240,20 +241,7 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
                 gap: 12,
               }}
             >
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 12,
-                  background: MOSTAZA,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 36,
-                }}
-              >
-                🍔
-              </div>
+              <BrandIconSvg size={56} />
               <div
                 style={{
                   fontSize: 32,
@@ -346,15 +334,14 @@ function NoPhotoHero({ name }: { name: string }) {
         {name}
       </div>
 
-      {/* Burger central grande */}
+      {/* Brand icon central grande (replicando el bun del logo) */}
       <div
         style={{
-          fontSize: 200,
           display: "flex",
           filter: "drop-shadow(0 8px 24px rgba(31, 27, 23, 0.35))",
         }}
       >
-        🍔
+        <BrandIconSvg size={220} />
       </div>
 
       {/* Tira inferior tipo cinta carbon */}
