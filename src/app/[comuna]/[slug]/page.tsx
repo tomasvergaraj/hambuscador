@@ -43,8 +43,8 @@ export async function generateMetadata({
     openGraph: {
       title: `${place.name} — Hambuscador`,
       description,
-      // TODO Fase 4: og:image dinámico generado en /api/og/[slug]
-      images: [`/api/og/${place.slug}`],
+      // og:image se genera automáticamente desde opengraph-image.tsx
+      // (Next.js convención). No declarar `images` acá para no pisarla.
     },
     alternates: {
       canonical: `/${place.comuna}/${place.slug}`,
