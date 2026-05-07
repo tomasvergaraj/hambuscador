@@ -96,3 +96,15 @@
 .map-fullscreen .maplibregl-ctrl-bottom-left {
   bottom: 4.5rem; /* clears la BottomNav */
 }
+
+/* Animación de entrada para toasts (PwaInstaller, etc) */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

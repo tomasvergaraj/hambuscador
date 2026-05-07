@@ -80,7 +80,7 @@ export default async function PerfilPage({
   const initials = initialsFromName(name);
 
   return (
-    <div className="flex flex-col min-h-screen pb-20">
+    <div className="flex flex-col min-h-screen pb-24">
       <Header title="mi perfil" />
 
       <main className="px-4 pt-4 flex-1 flex flex-col gap-4">

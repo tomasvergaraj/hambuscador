@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
+
+import { PwaInstaller } from "@/components/pwa/pwa-installer";
+
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -80,7 +83,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={`${bricolage.variable} ${geist.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaInstaller />
+      </body>
     </html>
   );
 }

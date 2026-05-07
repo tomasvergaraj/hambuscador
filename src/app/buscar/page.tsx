@@ -101,7 +101,7 @@ export default async function BuscarPage({
   // Vista lista: layout original
   // ============================================================================
   return (
-    <div className="flex flex-col min-h-screen pb-16">
+    <div className="flex flex-col min-h-screen pb-24">
       {/* Top row: back + search */}
       <header className="flex items-center gap-2 px-4 pt-3 pb-2">
         <Link
