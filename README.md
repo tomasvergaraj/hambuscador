@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="public/logo.svg" alt="Hambuscador" height="80" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/logo-dark.svg">
+    <img src="public/logo.svg" alt="Hambuscador" height="80" />
+  </picture>
 </p>
 
 # Hambuscador
