@@ -42,7 +42,7 @@ export function Header({ title, subtitle, isModal, avatarInitials }: HeaderProps
           type="button"
           onClick={() => (isModal ? router.back() : router.back())}
           aria-label={isModal ? "Cerrar" : "Volver"}
-          className="w-8 h-8 -ml-1 flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-colors"
+          className="w-8 h-8 -ml-1 flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90"
         >
           {isModal ? (
             <IconX size={20} stroke={1.75} />
@@ -75,7 +75,7 @@ export function Header({ title, subtitle, isModal, avatarInitials }: HeaderProps
       {avatarInitials ? (
         <Link
           href="/perfil"
-          className="w-8 h-8 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center text-xs font-medium hover:bg-mostaza transition-colors"
+          className="w-8 h-8 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center text-xs font-medium hover:bg-mostaza transition-[transform,colors] duration-150 active:scale-90"
           aria-label="Mi perfil"
         >
           {avatarInitials}

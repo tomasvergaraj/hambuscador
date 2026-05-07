@@ -1,4 +1,5 @@
 import { IconArrowLeft, IconList, IconMap } from "@tabler/icons-react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
@@ -7,6 +8,7 @@ import { PlacesMap } from "@/components/place/places-map";
 import { Chip } from "@/components/ui/chip";
 import { SearchBar } from "@/components/ui/search-bar";
 import { searchPlaces } from "@/lib/data";
+import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 
 type SearchParams = {
   q?: string;
@@ -27,8 +29,77 @@ export default async function BuscarPage({
   const sp = await searchParams;
   const query = sp.q ?? "";
   const view = sp.vista ?? "lista";
-  const results = await searchPlaces(query, { cuisine: sp.cuisine });
 
+  const [results, cookieStore] = await Promise.all([
+    searchPlaces(query, { cuisine: sp.cuisine }),
+    cookies(),
+  ]);
+  const userCoords = parseGeoCookie(cookieStore.get(GEO_COOKIE_NAME)?.value);
+
+  // ============================================================================
+  // Vista mapa: layout fullscreen con todos los controles flotando encima.
+  // El mapa es la capa de fondo; header, toggle y filtros viven en posición
+  // absoluta con backdrop-blur para legibilidad sobre el mapa.
+  // ============================================================================
+  if (view === "mapa") {
+    return (
+      <div className="fixed inset-0 flex flex-col overflow-hidden">
+        {/* Capa mapa — ocupa todo el viewport debajo de la nav inferior */}
+        <PlacesMap
+          places={results}
+          userCoords={userCoords ?? undefined}
+          className="map-fullscreen absolute inset-0 z-0"
+        />
+
+        {/* Top overlay: search + toggle */}
+        <div className="absolute top-0 left-0 right-0 z-10 pt-3 px-3 flex flex-col gap-2 pointer-events-none">
+          <header className="flex items-center gap-2 pointer-events-auto">
+            <Link
+              href="/"
+              aria-label="atrás"
+              className="w-9 h-9 inline-flex items-center justify-center text-carbon bg-white/95 backdrop-blur-sm shadow rounded-full transition-[transform,colors] duration-150 active:scale-90"
+            >
+              <IconArrowLeft size={18} />
+            </Link>
+            <div className="flex-1">
+              <SearchBar
+                size="md"
+                defaultValue={query}
+                placeholder="busca por barrio o nombre"
+              />
+            </div>
+          </header>
+
+          <div className="inline-flex w-full bg-white/95 backdrop-blur-sm border border-crema-edge rounded-full p-1 shadow pointer-events-auto">
+            <Link
+              href={{ pathname: "/buscar", query: { ...sp, vista: undefined } }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-[transform,colors] duration-150 active:scale-[0.97] text-carbon hover:bg-crema-edge/40"
+            >
+              <IconList size={14} aria-hidden="true" /> lista
+            </Link>
+            <Link
+              href={{ pathname: "/buscar", query: { ...sp, vista: "mapa" } }}
+              aria-current="page"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm bg-carbon text-crema font-medium"
+            >
+              <IconMap size={14} aria-hidden="true" /> mapa
+            </Link>
+          </div>
+        </div>
+
+        {/* Bottom: contador flotante encima de la nav */}
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 bg-carbon/90 backdrop-blur-sm text-crema text-xs font-medium px-3 py-1.5 rounded-full shadow">
+          {results.length} {results.length === 1 ? "resultado" : "resultados"}
+        </div>
+
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // Vista lista: layout original
+  // ============================================================================
   return (
     <div className="flex flex-col min-h-screen pb-16">
       {/* Top row: back + search */}
@@ -36,7 +107,7 @@ export default async function BuscarPage({
         <Link
           href="/"
           aria-label="atrás"
-          className="w-9 h-9 inline-flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-colors"
+          className="w-9 h-9 inline-flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90"
         >
           <IconArrowLeft size={18} />
         </Link>
@@ -50,21 +121,14 @@ export default async function BuscarPage({
         <div className="inline-flex w-full bg-crema-deep border border-crema-edge rounded-full p-1">
           <Link
             href={{ pathname: "/buscar", query: { ...sp, vista: undefined } }}
-            className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-colors ${
-              view === "lista"
-                ? "bg-carbon text-crema font-medium"
-                : "text-carbon hover:bg-crema-edge/40"
-            }`}
+            aria-current="page"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm bg-carbon text-crema font-medium"
           >
             <IconList size={14} aria-hidden="true" /> lista
           </Link>
           <Link
             href={{ pathname: "/buscar", query: { ...sp, vista: "mapa" } }}
-            className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-colors ${
-              view === "mapa"
-                ? "bg-carbon text-crema font-medium"
-                : "text-carbon hover:bg-crema-edge/40"
-            }`}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm transition-[transform,colors] duration-150 active:scale-[0.97] text-carbon hover:bg-crema-edge/40"
           >
             <IconMap size={14} aria-hidden="true" /> mapa
           </Link>
@@ -90,25 +154,15 @@ export default async function BuscarPage({
       </section>
 
       {/* Results */}
-      {view === "lista" ? (
-        <section className="px-4 flex flex-col gap-2 pb-6">
-          {results.length === 0 ? (
-            <EmptyState />
-          ) : (
-            results.map((place) => (
-              <PlaceCard key={place.id} place={place} variant="compact" />
-            ))
-          )}
-        </section>
-      ) : (
-        <section className="px-4 pb-6">
-          {results.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <PlacesMap places={results} />
-          )}
-        </section>
-      )}
+      <section className="px-4 flex flex-col gap-2 pb-6">
+        {results.length === 0 ? (
+          <EmptyState />
+        ) : (
+          results.map((place) => (
+            <PlaceCard key={place.id} place={place} variant="compact" />
+          ))
+        )}
+      </section>
 
       <div className="flex-1" />
       <BottomNav />

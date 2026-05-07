@@ -2,6 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { IconCurrentLocation } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 
 import type { Place } from "@/types/place";
@@ -31,14 +32,38 @@ const CHILE_CENTER: [number, number] = [-70.65, -33.45];
 
 let pmtilesRegistered = false;
 
-export function PlacesMap({ places }: { places: Place[] }) {
+type Props = {
+  places: Place[];
+  /** Coords del usuario (cookie hb_geo). Si está, se renderiza como marker tomate. */
+  userCoords?: { lat: number; lng: number };
+  /** Override de className para el container (ej. fixed inset-0 cuando es full screen). */
+  className?: string;
+};
+
+export function PlacesMap({ places, userCoords, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<import("maplibre-gl").Map | null>(null);
+
+  // Click del botón "saltar a mi ubicación". Usa flyTo (interpolación suave)
+  // y forzamos `essential: true` para que la animación corra incluso si el
+  // usuario tiene reduce-motion (sino el flyTo es instantáneo).
+  function flyToUser() {
+    const map = mapRef.current;
+    if (!map || !userCoords) return;
+    map.flyTo({
+      center: [userCoords.lng, userCoords.lat],
+      zoom: 15,
+      duration: 900,
+      essential: true,
+    });
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     let map: import("maplibre-gl").Map | null = null;
     let aborted = false;
+    let resizeObserver: ResizeObserver | null = null;
 
     (async () => {
       const maplibregl = (await import("maplibre-gl")).default;
@@ -107,22 +132,65 @@ export function PlacesMap({ places }: { places: Place[] }) {
           },
         }));
 
+      // Centro inicial: prioridad usuario > primer pin > Chile
+      const initialCenter: [number, number] = userCoords
+        ? [userCoords.lng, userCoords.lat]
+        : (features[0]?.geometry.coordinates as [number, number]) ?? CHILE_CENTER;
+      const initialZoom = userCoords ? 14 : features.length > 0 ? 12 : 5;
+
       map = new maplibregl.Map({
         container: containerRef.current,
         style: baseStyle,
-        center:
-          (features[0]?.geometry.coordinates as [number, number]) ??
-          CHILE_CENTER,
-        zoom: features.length > 0 ? 12 : 5,
+        center: initialCenter,
+        zoom: initialZoom,
       });
+      mapRef.current = map;
 
-      map.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right",
-      );
+      // MapLibre toma el tamaño del container al construirse. Si el container
+      // todavía está midiendo (ej. layout fullscreen recién montado) el canvas
+      // queda con tamaño viejo y el mapa se ve cortado. Observamos cambios
+      // en el container y forzamos resize.
+      const containerEl = containerRef.current;
+      if (containerEl && typeof ResizeObserver !== "undefined") {
+        resizeObserver = new ResizeObserver(() => {
+          if (map) map.resize();
+        });
+        resizeObserver.observe(containerEl);
+      }
+
+      // Marker de usuario — punto azul tipo "blue dot" estilo Google Maps,
+      // halo translúcido afuera para que se distinga de los pins de locales.
+      if (userCoords) {
+        const userEl = document.createElement("div");
+        userEl.setAttribute("aria-label", "tu ubicación");
+        userEl.style.width = "20px";
+        userEl.style.height = "20px";
+        userEl.style.position = "relative";
+        userEl.innerHTML = `
+          <span style="
+            position: absolute; inset: -10px;
+            background: rgba(59, 130, 246, 0.18);
+            border-radius: 50%;
+          "></span>
+          <span style="
+            position: absolute; inset: 0;
+            background: #3B82F6;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          "></span>
+        `;
+        new maplibregl.Marker({ element: userEl })
+          .setLngLat([userCoords.lng, userCoords.lat])
+          .addTo(map);
+      }
 
       map.on("load", () => {
         if (!map) return;
+
+        // Forzamos resize cuando el style termina de cargar — defensivo
+        // contra container size pendiente de aplicarse.
+        map.resize();
 
         map.addSource("places", {
           type: "geojson",
@@ -200,13 +268,22 @@ export function PlacesMap({ places }: { places: Place[] }) {
             rating: number;
           };
 
-          new maplibregl.Popup({ offset: 16, closeButton: false })
+          new maplibregl.Popup({ offset: 18, closeButton: false, maxWidth: "240px" })
             .setLngLat(coords)
             .setHTML(
-              `<div style="font-family: var(--font-geist), system-ui; padding: 4px 2px; min-width: 140px;">
-                 <div style="font-weight: 600; color: #1F1B17; font-size: 13px;">${escapeHtml(props.name)}</div>
-                 <div style="color: #6E5F4F; font-size: 11px; margin-top: 2px;">★ ${props.rating.toFixed(1)} · ${escapeHtml(props.comuna)}</div>
-                 <a href="${props.href}" style="display: inline-block; margin-top: 6px; color: #C84B31; font-size: 11px; font-weight: 500;">ver ficha →</a>
+              `<div style="font-family: var(--font-geist), system-ui; padding: 6px 4px 4px 4px; min-width: 180px;">
+                 <div style="font-family: var(--font-bricolage), system-ui; font-weight: 600; color: #1F1B17; font-size: 14px; line-height: 1.2;">${escapeHtml(props.name)}</div>
+                 <div style="color: #6E5F4F; font-size: 11px; margin-top: 3px;">
+                   <span style="color: #1F1B17; font-weight: 500;">★ ${props.rating.toFixed(1)}</span>
+                   <span style="margin: 0 4px;">·</span>${escapeHtml(props.comuna)}
+                 </div>
+                 <a href="${props.href}"
+                    style="display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 10px; padding: 8px 12px; background: #E8A02C; color: #1F1B17; font-family: var(--font-bricolage), system-ui; font-weight: 600; font-size: 12px; text-decoration: none; border-radius: 8px; transition: background 0.15s;"
+                    onmouseover="this.style.background='#C8862A'"
+                    onmouseout="this.style.background='#E8A02C'">
+                   ver ficha
+                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                 </a>
                </div>`,
             )
             .addTo(map);
@@ -243,30 +320,92 @@ export function PlacesMap({ places }: { places: Place[] }) {
           });
         }
 
-        if (features.length > 1) {
+        // Si tenemos userCoords ya centramos al construir el map, no hacemos
+        // fitBounds. Si no, encuadramos los pins. Saltamos fitBounds cuando
+        // el canvas está vacío (sino MapLibre tira "cannot fit within canvas").
+        const canvas = map.getCanvas();
+        const hasCanvasSize = canvas.width > 0 && canvas.height > 0;
+        if (!userCoords && features.length > 1 && hasCanvasSize) {
           const bounds = new maplibregl.LngLatBounds();
           for (const f of features) {
             bounds.extend(f.geometry.coordinates as [number, number]);
           }
-          map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 0 });
+          try {
+            map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 0 });
+          } catch {
+            // Defensivo: si igual el canvas estaba en transición, ignoramos
+          }
         }
       });
     })();
 
     return () => {
       aborted = true;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       map?.remove();
       map = null;
+      mapRef.current = null;
     };
-  }, [places]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [places, userCoords?.lat, userCoords?.lng]);
+
+  // Si nos pasan className, asumimos que el padre controla el posicionamiento
+  // (caso fullscreen). Sino, usamos el wrapper redondeado embebido.
+  // En cualquier caso, el div ref={containerRef} tiene 100% width/height por
+  // inline style — sino MapLibre's `.maplibregl-map { position: relative }`
+  // pisa nuestras clases Tailwind y el container colapsa a 0 dentro de un
+  // flex parent.
+  if (className) {
+    // `className` ya incluye `absolute` (caso fullscreen) que establece
+    // contexto de posicionamiento para el botón "locate me". No agregar
+    // `relative` acá: Tailwind generaría ambas position utilities y el
+    // orden de cascada puede flipear a relative, rompiendo el fullscreen.
+    return (
+      <div className={className}>
+        <div
+          ref={containerRef}
+          style={{ width: "100%", height: "100%" }}
+          role="application"
+          aria-label="mapa de hamburgueserías"
+        />
+        {userCoords ? <LocateMeButton onClick={flyToUser} /> : null}
+      </div>
+    );
+  }
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-[calc(100vh-200px)] min-h-100 rounded-xl overflow-hidden border border-crema-edge"
-      role="application"
-      aria-label="mapa de hamburgueserías"
-    />
+    <div className="w-full h-[calc(100vh-200px)] min-h-100 rounded-xl overflow-hidden border border-crema-edge relative">
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: "100%" }}
+        role="application"
+        aria-label="mapa de hamburgueserías"
+      />
+      {userCoords ? <LocateMeButton onClick={flyToUser} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Botón flotante "saltar a mi ubicación". Posicionado justo arriba de los
+ * zoom controls de MapLibre. Animación de press + ping cuando se aprieta.
+ */
+function LocateMeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="ir a mi ubicación"
+      className="group absolute right-3 bottom-24 z-10 inline-flex items-center justify-center w-11 h-11 rounded-full bg-white shadow-md border border-crema-edge text-carbon hover:bg-crema-deep transition-[transform,colors,box-shadow] duration-150 active:scale-90 hover:shadow-lg"
+    >
+      <IconCurrentLocation
+        size={20}
+        stroke={1.75}
+        aria-hidden="true"
+        className="transition-transform duration-150 group-active:rotate-[-15deg]"
+      />
+    </button>
   );
 }
 

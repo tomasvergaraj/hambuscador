@@ -37,7 +37,7 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
         href={href}
         className={cn(
           "block bg-white rounded-2xl border border-crema-edge overflow-hidden",
-          "hover:border-mostaza transition-colors",
+          "hover:border-mostaza transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md",
           className,
         )}
       >
@@ -85,7 +85,7 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
       href={href}
       className={cn(
         "flex bg-white rounded-xl border border-crema-edge overflow-hidden",
-        "hover:border-mostaza transition-colors",
+        "hover:border-mostaza transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md",
         className,
       )}
     >

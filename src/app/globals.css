@@ -86,3 +86,13 @@
     display: none;
   }
 }
+
+/* ============================================================
+   Map overrides — el atribution control (esquina inferior) se
+   sube en modo fullscreen para que no quede tapado por la
+   BottomNav. Los zoom controls fueron removidos (ver places-map).
+   ============================================================ */
+.map-fullscreen .maplibregl-ctrl-bottom-right,
+.map-fullscreen .maplibregl-ctrl-bottom-left {
+  bottom: 4.5rem; /* clears la BottomNav */
+}

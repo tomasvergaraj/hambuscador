@@ -11,15 +11,16 @@ import { cn } from "@/lib/utils";
  */
 const buttonVariants = cva(
   cn(
-    "inline-flex items-center justify-center transition-colors duration-150",
-    "disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex items-center justify-center transition-[transform,colors] duration-150",
+    "active:scale-[0.97]",
+    "disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mostaza focus-visible:ring-offset-2 focus-visible:ring-offset-crema",
   ),
   {
     variants: {
       variant: {
         primary:
-          "bg-mostaza text-carbon hover:bg-mostaza-deep active:scale-[0.98] font-display font-semibold",
+          "bg-mostaza text-carbon hover:bg-mostaza-deep font-display font-semibold",
         secondary:
           "bg-white text-carbon border border-crema-edge hover:bg-crema-deep",
         ghost: "bg-transparent text-carbon hover:bg-crema-deep",

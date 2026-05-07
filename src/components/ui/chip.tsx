@@ -19,7 +19,7 @@ export const Chip = React.forwardRef<HTMLButtonElement, ChipProps>(function Chip
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors",
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-[transform,colors] duration-150 active:scale-[0.96]",
         active
           ? "bg-carbon text-crema font-medium"
           : "bg-white text-carbon border border-crema-edge hover:bg-crema-deep",

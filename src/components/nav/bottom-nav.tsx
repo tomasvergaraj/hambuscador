@@ -44,7 +44,7 @@ export function BottomNav() {
             key={tab.id}
             href={tab.href}
             className={cn(
-              "flex flex-col items-center gap-0.5 transition-colors",
+              "flex flex-col items-center gap-0.5 transition-[transform,colors] duration-150 active:scale-90",
               active ? "text-carbon" : "text-bronceado hover:text-tinta-suave",
             )}
             aria-current={active ? "page" : undefined}
