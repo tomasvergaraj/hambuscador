@@ -11,6 +11,11 @@ import { getApprovedSlugs } from "@/server/services/places";
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://hambuscador.cl";
 
+// Refresh fallback: cada hora máximo. El admin approve action invalida
+// `/sitemap.xml` on-demand, así que en el camino feliz el sitemap se
+// actualiza al instante de aprobar — esto es solo el techo.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const slugs = await getApprovedSlugs();
   const now = new Date();

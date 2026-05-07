@@ -33,6 +33,9 @@ export async function approveAction(formData: FormData): Promise<void> {
   revalidatePath("/");
   revalidatePath("/buscar");
   revalidatePath("/admin/moderacion");
+  // Sitemap: el local recién aprobado ahora tiene URL pública, lo
+  // queremos en sitemap.xml lo antes posible para que Google lo indexe.
+  revalidatePath("/sitemap.xml");
 }
 
 /**
