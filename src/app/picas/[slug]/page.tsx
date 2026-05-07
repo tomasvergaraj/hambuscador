@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }) 
   if (!result) return { title: "lista no encontrada" };
   const { list } = result;
   return {
-    title: `${list.title} — picas | hambuscador`,
+    title: `${list.title} — picás | hambuscador`,
     description: list.intro,
     openGraph: {
       title: `${list.title} — hambuscador`,
@@ -49,13 +49,13 @@ export default async function PicaDetailPage({
       <header className="flex items-center gap-2 px-4 pt-3 pb-2">
         <Link
           href="/picas"
-          aria-label="volver a picas"
+          aria-label="volver a picás"
           className="w-9 h-9 inline-flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90"
         >
           <IconArrowLeft size={18} />
         </Link>
         <span className="flex-1 text-xs text-bronceado font-medium uppercase tracking-wider">
-          picas
+          picás
         </span>
         <ShareButton
           path={`/picas/${list.slug}`}

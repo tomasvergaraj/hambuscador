@@ -104,7 +104,7 @@ export const getRecentlyApprovedPlaces = cache(
 );
 
 /**
- * Picas (listas curadas) — resolución de criteria → places ordenados por popularidad.
+ * Picás (listas curadas) — resolución de criteria → places ordenados por popularidad.
  * Cache larga porque las listas son hardcoded y los places cambian poco.
  */
 export const getPlacesForPicasList = cache(

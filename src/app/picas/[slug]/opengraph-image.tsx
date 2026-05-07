@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 import { BrandIconSvg, PicaIconSvg } from "@/lib/og-icons";
 import { getPicasListBySlug } from "@/lib/picas";
 
-export const alt = "Hambuscador — pica curada";
+export const alt = "Hambuscador — picá curada";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -147,7 +147,7 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
               letterSpacing: 2,
             }}
           >
-            picas curada
+            picá curada
           </div>
         </div>
 

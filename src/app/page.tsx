@@ -95,7 +95,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* CTA picas curadas */}
+      {/* CTA picás curadas */}
       <section className="px-4 mt-6">
         <Link
           href="/picas"

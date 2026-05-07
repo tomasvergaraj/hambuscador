@@ -6,7 +6,7 @@ import { PicaIcon } from "@/components/place/pica-icon";
 import { getPicasListsWithCounts } from "@/lib/data";
 
 export const metadata = {
-  title: "picas — listas curadas",
+  title: "picás — listas curadas",
   description:
     "Las hamburgueserías que valen la pena, organizadas por estilo, presupuesto y barrio. Listas armadas con cariño.",
 };
@@ -16,7 +16,7 @@ export default async function PicasIndexPage() {
 
   return (
     <main className="min-h-screen pb-24">
-      <Header title="picas" subtitle="listas curadas" backHref="/" />
+      <Header title="picás" subtitle="listas curadas" backHref="/" />
 
       <section className="px-4 pt-4">
         <h1 className="font-display font-semibold text-[26px] leading-[1.05] text-carbon">
