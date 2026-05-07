@@ -412,24 +412,48 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-06**: Fases 0, 1, 2 y 3 cerradas. Listo para deploy.
+**Estado al 2026-05-07**: Fases 0, 1, 2, 3 cerradas. **MVP en producción** en `https://hambuscador.vercel.app`.
 
-### Próximo: provisionar infra (planeado 2026-05-07)
+### Deploy actual (2026-05-07)
 
-Owner: usuario. Stack: VPS propia + Cloudflare R2 + Vercel. Pasos detallados en la sección "Es hora de montar la infra" del último mensaje del chat anterior. Resumen:
+Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB porque la latencia Vercel→VPS y la falta de PostGIS en la imagen postgres existente lo desaconsejaban).
 
-1. **DB**: Postgres+PostGIS en VPS (Docker o nativo). `pnpm db:push && pnpm db:postgis && pnpm db:seed`. SSL obligatorio para Vercel.
-2. **R2**: bucket `hambuscador-photos`, API token con Read+Write, custom domain (`photos.tudominio.cl`), CORS abierto a localhost+prod domain.
-3. **Dominio**: registrar (recomendado Cloudflare Registrar). DNS apuntando dominio raíz → Vercel, subdominio photos → R2.
-4. **Vercel**: import del repo, env vars (AUTH_SECRET nuevo, DATABASE_URL, R2_*, NEXT_PUBLIC_SITE_URL, opcional Google OAuth y NEXT_PUBLIC_PMTILES_URL).
-5. **Bootstrap admin**: `UPDATE users SET role = 'admin' WHERE email = '...'` + relogin para JWT.
+| Componente | Servicio | Estado |
+|---|---|---|
+| Hosting | Vercel Hobby (`hambuscador.vercel.app`) | ✅ live |
+| DB | Neon Free, region `aws-us-east-2`, Postgres 16 + PostGIS 3 | ✅ live |
+| Storage | Cloudflare R2, bucket `hambuscador-photos`, public URL `pub-fbbb0c1401eb442cb484b22514d3ad85.r2.dev` | ✅ live |
+| Auth | Google OAuth (project `hambuscador-495612`) + Credentials | ✅ live |
+| Dominio custom | Pendiente — `hambuscador.cl` (NIC.cl) | ⏳ no comprado todavía |
 
-### Pendientes de código (post-deploy)
+**Repo clonado en VPS**: `/var/www/hambuscador/` (SSH remote `git@github.com:tomasvergaraj/hambuscador.git`). Ahí seguimos trabajando — branch `main` se autodeploya en Vercel al hacer push.
+
+**Env vars en Vercel** (las reales viven en Vercel → Project Settings → Environment Variables, NO en este repo):
+`DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`.
+
+**DB inicializada** vía Docker en VPS (Node 20 alpine + pnpm) corriendo `db:push --force` + `db:postgis` + `db:seed`. 12 hamburgueserías de Quillota cargadas. Usuario seed: `seed-camila@hambuscador.cl` / `hambuscador123`.
+
+### Fixes hechos en esta sesión
+
+- **2026-05-07** `feat(place): mostrar rango de precio con descripción legible` — el `$$` aparecía solo en una línea de metadatos chiquita sin contexto. Ahora hay info row con `IconCash` y descripción "$7.000 — $12.000 por persona" en `[comuna]/[slug]/page.tsx`.
+
+### Próximos pasos pendientes
+
+#### Deploy / infra
+1. **Comprar dominio `hambuscador.cl`** en NIC.cl. Después: agregar en Vercel → Domains, configurar DNS (`A @ 76.76.21.21`, `CNAME www cname.vercel-dns.com`), actualizar env vars `AUTH_URL` y `NEXT_PUBLIC_SITE_URL`, agregar redirect URI en Google OAuth, agregar origin en CORS de R2.
+2. **Custom domain en R2** → conectar `photos.hambuscador.cl` al bucket, actualizar `R2_PUBLIC_URL`.
+3. **Bootstrap admin**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = '...'` → cerrar sesión y reloguearse (rol viaja en JWT).
+4. **Bug `/picas` 404**: hay un link en [src/app/page.tsx:91](src/app/page.tsx#L91) (`href="/picas"`) que apunta a una ruta que no existe. Decidir: crear la página de listas o quitar el link.
+5. **CORS R2 verificado**: si los uploads desde el navegador siguen rebotando con CORS preflight, revisar que el bucket tenga la policy con `AllowedOrigins: ["http://localhost:3000", "https://hambuscador.vercel.app"]`, `AllowedMethods: ["PUT", "GET"]`, `AllowedHeaders: ["*"]`, `ExposeHeaders: ["ETag"]`.
+
+#### Código (post-deploy)
 
 1. **Edición/borrado de reseña propia** — hoy `submitReview` rebota si el usuario ya reseñó el local. Falta UI para editar/borrar la propia (`deleteReview` ya existe en el service).
 2. **Listas de actividad en `/perfil`** — hoy muestra counts. Próximo: tabs/secciones con las reseñas, favoritos y aportes del usuario (links navegables a cada local).
 3. **Geocoding real en `/agregar`** — hoy lat/lng = centroide de la comuna. Próximo: autocomplete con nominatim (sin API key) o Google Places, usuario confirma el pin en un mini-mapa.
 4. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
+5. **Página `/picas`** (listas curadas, ej: "Las mejores smash de Stgo") — referenciada en home pero no existe.
+6. **Admin extendido**: hoy solo modera locales. Sumar moderación de reseñas, ban/promote de usuarios, edición de locales aprobados.
 
 ### Fase 4 — SEO & PWA (post-deploy)
 
