@@ -29,33 +29,55 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-crema-edge px-4 pt-2.5 pb-3 flex justify-around items-center z-40"
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-crema-edge pt-2.5 z-40"
     >
-      {BOTTOM_NAV_TABS.map((tab) => {
-        const Icon = ICON_MAP[tab.icon];
-        const tabPath = tab.href.split("?")[0]!;
-        const active =
-          tabPath === "/"
-            ? pathname === "/"
-            : pathname.startsWith(tabPath);
+      <div className="px-4 flex justify-around items-center">
+        {BOTTOM_NAV_TABS.map((tab) => {
+          const Icon = ICON_MAP[tab.icon];
+          const tabPath = tab.href.split("?")[0]!;
+          const active =
+            tabPath === "/"
+              ? pathname === "/"
+              : pathname.startsWith(tabPath);
 
-        return (
-          <Link
-            key={tab.id}
-            href={tab.href}
-            className={cn(
-              "flex flex-col items-center gap-0.5 transition-[transform,colors] duration-150 active:scale-90",
-              active ? "text-carbon" : "text-bronceado hover:text-tinta-suave",
-            )}
-            aria-current={active ? "page" : undefined}
-          >
-            <Icon size={22} stroke={1.75} aria-hidden="true" />
-            <span className={cn("text-[10px]", active && "font-medium")}>
-              {tab.label}
-            </span>
-          </Link>
-        );
-      })}
+          return (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={cn(
+                "flex flex-col items-center gap-0.5 transition-[transform,colors] duration-150 active:scale-90",
+                active ? "text-carbon" : "text-bronceado hover:text-tinta-suave",
+              )}
+              aria-current={active ? "page" : undefined}
+            >
+              <Icon size={22} stroke={1.75} aria-hidden="true" />
+              <span className={cn("text-[10px]", active && "font-medium")}>
+                {tab.label}
+              </span>
+              {/* Indicador de tab activo — siempre presente para que el
+                  layout no salte; transparente cuando inactivo */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "h-[2px] w-5 rounded-full transition-colors mt-0.5",
+                  active ? "bg-mostaza" : "bg-transparent",
+                )}
+              />
+            </Link>
+          );
+        })}
+      </div>
+      <p className="text-center text-[10px] text-bronceado/55 pt-1.5 pb-1">
+        desarrollado por{" "}
+        <a
+          href="https://nexosoftware.cl"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-bronceado/80 hover:text-bronceado transition-colors"
+        >
+          nexo software
+        </a>
+      </p>
     </nav>
   );
 }

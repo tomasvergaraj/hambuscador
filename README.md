@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.svg" alt="Hambuscador" height="80" />
+</p>
+
 # Hambuscador
 
 > La picá hamburguesera de Chile.
