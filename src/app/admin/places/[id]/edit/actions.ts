@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { COMUNAS_REGISTRY, CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { auth } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
 import { getPlaceByIdForAdmin, updatePlace } from "@/server/services/places";

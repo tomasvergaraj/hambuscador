@@ -241,7 +241,7 @@ export function EditPlaceForm({ place }: { place: Place }) {
           <span className="text-sm text-carbon">marcar como verificado</span>
         </label>
         <p className="text-[11px] text-bronceado">
-          el badge "verificado" aparece en la ficha y la card. úsalo para locales
+          el badge «verificado» aparece en la ficha y la card. úsalo para locales
           revisados manualmente.
         </p>
       </Section>
