@@ -412,7 +412,7 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-07 (sesión 2)**: Fases 0, 1, 2, 3 cerradas + **Fase 4 (SEO + PWA) casi completa**. **MVP en producción** en `https://hambuscador.vercel.app`.
+**Estado al 2026-05-07 (sesión 3)**: Fases 0-4 cerradas + descubrimiento, búsqueda y admin pulidos a nivel viral. **MVP en producción** en `https://hambuscador.vercel.app`.
 
 ### Deploy actual
 
@@ -439,6 +439,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 
 **Migraciones aplicadas a mano en Neon prod** (drizzle-kit no corre en Vercel build):
 - `drizzle/2026-05-07-hours-by-day-banned-cursor.sql` — `places.hours_by_day` jsonb, `users.banned_at` timestamptz, índice cursor `reviews_created_at_idx`. Ya en prod ✅.
+- `drizzle/2026-05-07-search-unaccent.sql` — `unaccent` extension, función IMMUTABLE `f_unaccent`, reindex GIN trigram en `f_unaccent(lower(name|comuna_label|specialty))`. Ya en prod ✅.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
@@ -497,6 +498,56 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 #### Voz / contenido
 - ✅ Barrido de argentinismos en error messages (definilo→defínelo, levantá→inicia, configurá→configura, probá→prueba/intenta, tocá→toca, elegí→elige)
 
+### Hecho en esta sesión (2026-05-07 sesión 3)
+
+#### Descubrimiento (home + lista + búsqueda)
+- ✅ Home reorganizado: search funcional (`<HomeSearchInput>` redirige a `/buscar?q=…`), 5 quick-chips link a filtros pre-aplicados, sección "recién agregadas" (places aprobados últimos 14d), CTA UGC "¿conoces una picá que falta?", removido el "trending" fake. Heading "cerca de ti" / "los mejor calificados" según coords.
+- ✅ `/buscar` con filtros funcionales: chips multi-select (abierto + 4 precios + 8 cocinas), menú de orden (rating/distancia/recientes/popularity) con default dinámico según coords, soft nav vía router.push (sin reload).
+- ✅ Búsqueda live debounced (200ms, useTransition para spinner sutil) + sync con back/forward del browser. Reemplaza el form GET.
+- ✅ Mapa refactorizado: init-once + pins-update separados. Cambios de filtros NO reconstruyen el mapa, solo `setData` del GeoJSON source. Tiles, viewport y popups se mantienen. fitBounds inicial protegido por `didInitialFitRef`.
+- ✅ Agrupación inteligente en lista (cuando no hay query/filtros/orden): con coords → bandas `<1km / 1-5km / >5km`; sin coords → por comuna.
+- ✅ Empty state mejorado con CTAs "quitar filtros" + "agregar picá".
+
+#### Search viral-grade
+- ✅ Migration `2026-05-07-search-unaccent.sql`: `unaccent` extension + `f_unaccent` IMMUTABLE wrapper + GIN trigram reindex sobre `f_unaccent(lower(...))`.
+- ✅ Helper `src/lib/search.ts`: `normalizeForSearch` (NFD + strip combining marks), `tokenizeQuery` con stop-words es-CL y sinónimos como GRUPOS de alternativas (OR dentro, AND entre).
+- ✅ `searchPlaces` reescrito: WHERE multi-token AND con cada grupo OR de alternativas, score por grupo (max alternative · max field weight: prefix-name=5, name=3, cuisine=2, specialty=1.5, comuna=1, address=0.5), bonus +5 si phrase completa cabe en name. ORDER BY relevancia → bayesian rating (prior C=5 μ=4.0) → distancia si coords → rating raw. Fuzzy fallback con `pg_trgm.similarity > 0.3` cuando strict da 0.
+- ✅ Validado: `champinones` matchea `champiñones`, `anejo` matchea `añejo`, `patty wagyu` (multi-token AND) matchea Holy Patty, `Quillotno` (typo) cae en fuzzy fallback, sinónimos veggie/vegan/hamburguesa funcionan como alternativas OR.
+
+#### Listas curadas /picas
+- ✅ 5 listas hardcoded en `src/lib/picas.ts` con criteria: top smash, veggie y vegana, barata y buena (priceRanges + minRating), para celebrar (priceRanges + minRating 4.5), lo mejor de Quillota.
+- ✅ Cada lista tiene `icon: PicaIconName` (`flame|leaf|coin|sparkles|map-pin`) que mapea a Tabler icons en UI (`PicaIcon` helper) y a paths SVG inline en el OG (`og-icons.tsx` con `BrandIconSvg` + `PicaIconSvg`). Los emojis 🔥🌱💸✨🥑 quedaron eliminados.
+- ✅ `searchPlaces` ganó `sort: 'popularity'`, `minBayesRating`, `approvedWithinDays` para criterios curatoriales.
+- ✅ Service `services/picas.ts` delega a searchPlaces. Data layer `getPlacesForPicasList` y `getPicasListsWithCounts` con cache 5min.
+- ✅ `/picas` (index): tarjetas con icono mostaza-tinted + count + preview del primer local.
+- ✅ `/picas/[slug]`: ranking 1-2-3 (top 3 mostaza, resto crema), ShareButton, OG image dinámica (~80 KB), `generateStaticParams` para pre-render.
+- ✅ Sitemap incluye `/picas` + las 5 listas.
+- ✅ Home tiene CTA carbon "listas para no errarle" → `/picas` (con `IconList`).
+- ✅ Back button de `/picas` va a inicio (no `router.back`) — tab destino, no transitivo. Patrón generalizable: `<Header backHref="/" />`.
+- ✅ Voz: "picá" / "picás" siempre con tilde en UI/OG/comentarios. Memoria persistida.
+
+#### Admin
+- ✅ Edición de locales aprobados: nueva sección `/admin/places` (index con búsqueda + filtro por estado) y `/admin/places/[id]/edit` (form flat con todos los campos: nombre, comunaLabel, región, dirección + pin draggable, cuisines multi-select, precio, especialidad, horario por día, teléfono/IG, fotos máx 6, flag isVerified). slug y comunaSlug NO editables (rompería URLs).
+- ✅ Service: `getPlaceByIdForAdmin`, `getAllPlacesForAdmin`, `updatePlace`, `countPendingPlaces`. `deserializeSchedule` helper agregado en `days-schedule.tsx`.
+- ✅ Action `updatePlaceAction` con admin guard via session.user.role + zod validation.
+- ✅ Pencil icon en ficha pública (visible solo si role=admin) → `/admin/places/[id]/edit`.
+- ✅ Tab "locales" en `/admin/*` nav.
+- ✅ Badge mostaza con count de pendientes en el tab `pendientes` (visible desde cualquier ruta admin). Decisión: NO email-per-submission — escala mal, viral risk. Memoria persistida.
+- ✅ Bug fix: `isVerified` se guardaba en DB pero NO se renderizaba en público. Ahora `<IconRosetteDiscountCheckFilled>` mostaza en PlaceCard (compact + featured) y pill "verificado" en ficha detail.
+
+#### OG / branding
+- ✅ Place OG: ahora SIEMPRE usa gradient hero (no la foto del local). Bajó el peso de ~650 KB → ~85-95 KB, dentro del límite de WhatsApp. Trade-off aceptado: foto vive en la ficha real, no en el preview social.
+- ✅ Place OG: 🍔 emojis reemplazados por `BrandIconSvg` (paths del logo bun) y ⭐ por `StarFilledSvg` (path de Tabler IconStarFilled).
+- ✅ Picas OG: emoji XL central → `PicaIconSvg`, tile mostaza con 🍔 → `BrandIconSvg`.
+- ✅ pwa-installer: 🍔 del toast → `<Logo variant="icon" />`.
+- ✅ Home CTA listas: 📋 → `IconList`.
+- ✅ README: `<picture>` con `prefers-color-scheme: dark` sirve `logo-dark.svg` (texto crema legible sobre dark).
+
+#### DX
+- ✅ Memoria nueva: `feedback_pica.md` (picá/picás con tilde) y `feedback_notifications.md` (no escalar notificaciones linealmente).
+- ✅ Lección aprendida: `pnpm build` y `pnpm dev` comparten `.next/`. Correr build pisa los manifests del dev y rompe HMR. Para verificar producción usar `pnpm typecheck` + `pnpm lint` localmente; si necesitás `pnpm build`, kill el dev primero.
+- ✅ Bug histórico: Vercel build con eslint más estricto que tsc local. Errores típicos: `react/no-unescaped-entities` en comillas y `@typescript-eslint/no-unused-vars`. Si sospechás, correr `pnpm lint` antes de pushear.
+
 ### Próximos pasos pendientes
 
 #### Deploy / infra
@@ -508,12 +559,13 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 
 #### Código
 
-1. **Página `/picas`** (listas curadas, ej: "Top smash de Stgo", "Mejores de Quillota") — el link del home se removió en esta sesión, falta crear la página con queries por filtro y decidir criterios curatoriales.
-2. **Filtros funcionales en `/buscar`** — los chips "abierto", "$$ o menos", "smash" son decorativos. Hacerlos clickeables, persistir en URL, afectar la query.
-3. **Notificaciones por correo al admin** cuando alguien sube un local — hoy hay que entrar manualmente a `/admin/moderacion` para chequear.
-4. **Edición de locales aprobados** desde el admin (errores de tipeo, fotos faltantes, dueño que reclama).
-5. **Moderación retroactiva**: cuando se banea un usuario, sus reseñas existentes quedan visibles. Decidir si ocultarlas o mantenerlas (por ahora se mantienen — ban es preventivo).
-6. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
+1. **Moderación retroactiva**: cuando se banea un usuario, sus reseñas existentes quedan visibles. Decidir si ocultarlas o mantenerlas (por ahora se mantienen — ban es preventivo).
+2. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
+3. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
+4. **Más listas curadas en /picas** según crezca el catálogo: por comuna específica, por horario nocturno, por temática. Hardcoded por ahora; mover a tabla `picas_lists` con CRUD admin cuando se justifique.
+5. **Search analytics**: log de queries (qué tipean los users, cuáles dan 0 hits) para informar nuevos sinónimos y/o suggestions.
+6. **Autocomplete en search**: dropdown debajo del input con sugerencias (top hits + listas + comunas). Trabajo más grande, otra sesión.
+7. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
 
 #### Fase 5 — engagement (nada empezado)
 
