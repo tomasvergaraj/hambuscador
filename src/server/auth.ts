@@ -66,6 +66,7 @@ function buildProviders() {
           email: user.email,
           name: user.name,
           image: user.image,
+          role: user.role,
         };
       },
     }),
@@ -107,12 +108,16 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        // OAuth flows (Google) ya traen el row completo del adapter; Credentials
+        // lo seteamos arriba en authorize. Default 'user' por seguridad.
+        token.role = (user as { role?: "user" | "admin" }).role ?? "user";
       }
       return token;
     },
     async session({ session, token }) {
       if (token.id && session.user) {
         session.user.id = token.id as string;
+        session.user.role = (token.role as "user" | "admin" | undefined) ?? "user";
       }
       return session;
     },

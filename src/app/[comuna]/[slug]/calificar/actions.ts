@@ -30,6 +30,7 @@ const reviewSchema = z.object({
     .max(1000, "Máximo 1000 caracteres")
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
+  photos: z.array(z.string().url()).max(4, "Máximo 4 fotos").default([]),
 });
 
 export type SubmitReviewState = {
@@ -69,6 +70,7 @@ export async function submitReview(
     aspect_atencion: formData.get("aspect_atencion"),
     aspect_ambiente: formData.get("aspect_ambiente"),
     text: formData.get("text"),
+    photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
   });
 
   if (!parsed.success) {
@@ -84,7 +86,7 @@ export async function submitReview(
       aspectAtencion: parsed.data.aspect_atencion,
       aspectAmbiente: parsed.data.aspect_ambiente,
       text: parsed.data.text,
-      photos: [],
+      photos: parsed.data.photos,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "";

@@ -55,24 +55,32 @@ export const REVIEW_ASPECTS = [
 export type ReviewAspectId = (typeof REVIEW_ASPECTS)[number]["id"];
 
 /**
- * Comunas con seed inicial de hamburgueserías. Esta lista se expandirá
- * a medida que se agreguen locales en otras comunas. La fuente de verdad
- * en producción será la DB.
+ * Registry de comunas soportadas. Mientras no haya geocoding real (Fase 3
+ * con autocomplete de direcciones), usamos el centroide aproximado de la
+ * comuna como fallback de lat/lng al crear un local nuevo desde `/agregar`.
+ *
+ * El campo `slug` es la clave pública (URL: `/[comuna]/...`). `label` y
+ * `region` se denormalizan en la tabla `places` al crear.
  */
-export const SEED_COMUNAS = [
-  "providencia",
-  "nunoa",
-  "las-condes",
-  "santiago",
-  "vitacura",
-  "lo-barnechea",
-  "la-reina",
-  "macul",
-  "valparaiso",
-  "vina-del-mar",
-  "concon",
-  "quillota",
+export const COMUNAS_REGISTRY = [
+  { slug: "providencia",  label: "Providencia",     region: "Región Metropolitana", lat: -33.4262, lng: -70.6166 },
+  { slug: "nunoa",        label: "Ñuñoa",           region: "Región Metropolitana", lat: -33.4569, lng: -70.5933 },
+  { slug: "las-condes",   label: "Las Condes",      region: "Región Metropolitana", lat: -33.4142, lng: -70.5728 },
+  { slug: "santiago",     label: "Santiago",        region: "Región Metropolitana", lat: -33.4489, lng: -70.6693 },
+  { slug: "vitacura",     label: "Vitacura",        region: "Región Metropolitana", lat: -33.3823, lng: -70.5917 },
+  { slug: "lo-barnechea", label: "Lo Barnechea",    region: "Región Metropolitana", lat: -33.3567, lng: -70.5167 },
+  { slug: "la-reina",     label: "La Reina",        region: "Región Metropolitana", lat: -33.4458, lng: -70.5333 },
+  { slug: "macul",        label: "Macul",           region: "Región Metropolitana", lat: -33.4925, lng: -70.5908 },
+  { slug: "valparaiso",   label: "Valparaíso",      region: "Región de Valparaíso", lat: -33.0458, lng: -71.6197 },
+  { slug: "vina-del-mar", label: "Viña del Mar",    region: "Región de Valparaíso", lat: -33.0153, lng: -71.5500 },
+  { slug: "concon",       label: "Concón",          region: "Región de Valparaíso", lat: -32.9314, lng: -71.5267 },
+  { slug: "quillota",     label: "Quillota",        region: "Región de Valparaíso", lat: -32.8806, lng: -71.2486 },
 ] as const;
+
+export type ComunaSlug = (typeof COMUNAS_REGISTRY)[number]["slug"];
+
+/** Slugs solamente — útil para el seed o validaciones. */
+export const SEED_COMUNAS = COMUNAS_REGISTRY.map((c) => c.slug);
 
 /**
  * Tabs del bottom navigation. Orden importa.

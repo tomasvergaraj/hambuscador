@@ -237,6 +237,7 @@ export async function createPlace(input: {
   hoursWeekends?: string;
   phone?: string;
   instagram?: string;
+  photos?: string[];
   submittedBy: string;
 }): Promise<DbPlace> {
   if (!isDbConfigured()) {
@@ -262,6 +263,7 @@ export async function createPlace(input: {
     hoursWeekends: input.hoursWeekends ?? null,
     phone: input.phone ?? null,
     instagram: input.instagram ?? null,
+    photos: input.photos ?? [],
     submittedBy: input.submittedBy,
     moderationStatus: "pending",
   };
@@ -269,6 +271,64 @@ export async function createPlace(input: {
   const [row] = await db.insert(places).values(newPlace).returning();
   if (!row) throw new Error("INSERT no retornó fila");
   return row;
+}
+
+/**
+ * Lista de places en estado `pending` (aguardando moderación), ordenados
+ * por más viejos primero (FIFO de revisión).
+ */
+export async function getPendingPlaces(opts?: { limit?: number }): Promise<Place[]> {
+  if (!isDbConfigured()) return [];
+
+  const { limit = 50 } = opts ?? {};
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(places)
+    .where(eq(places.moderationStatus, "pending"))
+    .orderBy(sql`created_at ASC`)
+    .limit(limit);
+
+  return rows.map((row) => dbPlaceToUi(row));
+}
+
+/**
+ * Aprueba un place: cambia status a `approved` y marca `approvedAt`.
+ * Llamar desde Server Action protegida por rol admin.
+ */
+export async function approvePlace(placeId: string): Promise<void> {
+  if (!isDbConfigured()) {
+    throw new Error("approvePlace requiere DATABASE_URL");
+  }
+
+  const db = getDb();
+  await db
+    .update(places)
+    .set({
+      moderationStatus: "approved",
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(places.id, placeId));
+}
+
+/**
+ * Rechaza un place. Lo deja en `rejected` para auditoría (no se borra).
+ * TODO Fase 5: agregar `rejectionReason` text para feedback al submitter.
+ */
+export async function rejectPlace(placeId: string): Promise<void> {
+  if (!isDbConfigured()) {
+    throw new Error("rejectPlace requiere DATABASE_URL");
+  }
+
+  const db = getDb();
+  await db
+    .update(places)
+    .set({
+      moderationStatus: "rejected",
+      updatedAt: new Date(),
+    })
+    .where(eq(places.id, placeId));
 }
 
 /**

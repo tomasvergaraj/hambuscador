@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils";
 
 export type SearchBarProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
-  "onChange"
+  "onChange" | "size"
 > & {
+  /** Cuando está seteado, el input es controlado. Si no, es uncontrolled (usa `defaultValue`). */
   value?: string;
+  size?: "md" | "lg";
   placeholder?: string;
   onValueChange?: (value: string) => void;
   onClear?: () => void;
@@ -19,7 +21,9 @@ export const SearchBar = React.forwardRef<HTMLInputElement, SearchBarProps>(
   function SearchBar(
     {
       value,
+      defaultValue,
       placeholder = "busca por barrio o nombre",
+      size = "md",
       onValueChange,
       onClear,
       containerClassName,
@@ -28,16 +32,21 @@ export const SearchBar = React.forwardRef<HTMLInputElement, SearchBarProps>(
     },
     ref,
   ) {
+    const isControlled = value !== undefined;
+    const sizeClasses =
+      size === "lg" ? "px-3.5 py-3 text-base" : "px-3 py-2.5 text-sm";
+
     return (
       <div
         className={cn(
-          "flex items-center gap-2.5 bg-white rounded-xl px-3 py-2.5 border border-crema-edge",
+          "flex items-center gap-2.5 bg-white rounded-xl border border-crema-edge",
           "focus-within:border-mostaza transition-colors",
+          sizeClasses,
           containerClassName,
         )}
       >
         <IconSearch
-          size={16}
+          size={size === "lg" ? 18 : 16}
           stroke={1.75}
           className="text-bronceado shrink-0"
           aria-hidden="true"
@@ -45,16 +54,22 @@ export const SearchBar = React.forwardRef<HTMLInputElement, SearchBarProps>(
         <input
           ref={ref}
           type="search"
-          value={value ?? ""}
-          onChange={(e) => onValueChange?.(e.target.value)}
+          {...(isControlled
+            ? { value, onChange: (e) => onValueChange?.(e.target.value) }
+            : {
+                defaultValue,
+                onChange: onValueChange
+                  ? (e) => onValueChange(e.target.value)
+                  : undefined,
+              })}
           placeholder={placeholder}
           className={cn(
-            "flex-1 bg-transparent text-sm text-carbon placeholder:text-bronceado outline-none min-w-0",
+            "flex-1 bg-transparent text-carbon placeholder:text-bronceado outline-none min-w-0",
             className,
           )}
           {...props}
         />
-        {value && (onClear || onValueChange) ? (
+        {isControlled && value && (onClear || onValueChange) ? (
           <button
             type="button"
             onClick={() => {

@@ -1,9 +1,9 @@
 "use client";
 
-import { IconCamera, IconPlus } from "@tabler/icons-react";
 import { useActionState, useState } from "react";
 
 import { Header } from "@/components/nav/header";
+import { PhotoUploader } from "@/components/place/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { StarRating } from "@/components/ui/star-rating";
 import { REVIEW_ASPECTS } from "@/lib/constants";
@@ -17,6 +17,7 @@ export function CalificarForm({ place }: { place: Place }) {
   const [overallRating, setOverallRating] = useState(0);
   const [aspectRatings, setAspectRatings] = useState<Record<string, number>>({});
   const [reviewText, setReviewText] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
   const [state, formAction, pending] = useActionState(submitReview, initialState);
 
   const ratingLabel =
@@ -30,7 +31,7 @@ export function CalificarForm({ place }: { place: Place }) {
             ? "regular"
             : overallRating >= 1
               ? "mala"
-              : "tocá una estrella";
+              : "toca una estrella";
 
   return (
     <form action={formAction} className="flex flex-col min-h-screen pb-24">
@@ -53,6 +54,9 @@ export function CalificarForm({ place }: { place: Place }) {
         name="aspect_ambiente"
         value={aspectRatings.ambiente ?? ""}
       />
+      {photos.map((url) => (
+        <input key={url} type="hidden" name="photos" value={url} />
+      ))}
 
       <Header title="calificar" subtitle={place.name} isModal />
 
@@ -112,22 +116,11 @@ export function CalificarForm({ place }: { place: Place }) {
         />
       </section>
 
-      <section aria-label="agregar fotos" className="px-4 pt-4 flex gap-2">
-        {/* TODO Fase 2.5: integrar storage (R2/Supabase) — botones por ahora son no-op */}
-        <button
-          type="button"
-          className="w-14 h-14 inline-flex flex-col items-center justify-center gap-0.5 border border-dashed border-crema-edge rounded-md text-bronceado hover:border-bronceado"
-        >
-          <IconPlus size={16} aria-hidden="true" />
-          <span className="text-[9px]">foto</span>
-        </button>
-        <button
-          type="button"
-          className="w-14 h-14 inline-flex flex-col items-center justify-center gap-0.5 border border-dashed border-crema-edge rounded-md text-bronceado hover:border-bronceado"
-        >
-          <IconCamera size={16} aria-hidden="true" />
-          <span className="text-[9px]">cámara</span>
-        </button>
+      <section aria-label="agregar fotos" className="px-4 pt-4">
+        <p className="text-[10px] text-bronceado tracking-widest font-medium mb-2">
+          FOTOS (OPCIONAL)
+        </p>
+        <PhotoUploader value={photos} onChange={setPhotos} max={4} />
       </section>
 
       {state.error ? (

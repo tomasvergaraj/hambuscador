@@ -304,13 +304,15 @@ Tokens en Tailwind v4. Componentes base. 9 pantallas implementadas conectadas a 
 - ✅ docker-compose para dev local
 - ✅ Auth pages conectadas: `/iniciar-sesion` (credentials + Google) y `/registro` (createUser con bcrypt + autologin) usan Server Actions con `useActionState`. Avatar real en home leyendo `auth()`.
 - ✅ `/[comuna]/[slug]/calificar` conectado: page redirige a `/iniciar-sesion` sin sesión, form submit dispara Server Action que valida con zod, crea review con `createReview`, revalidatePath del detalle del local y redirige. Maneja unique constraint (un usuario una reseña) y modo demo.
-- ⏳ Faltan: Server Action para crear local (`/agregar`), botón sign-out en `/perfil`, integrar storage de fotos (Cloudflare R2)
+- ✅ `/agregar` conectado: wizard funcional de 3 pasos (paso 1 nombre + comuna + dirección, paso 2 cocinas + precio + horarios + especialidad, paso 3 contacto). Hidden inputs mirroran state, validación local entre pasos, action `createPlaceAction` valida con zod, usa centroide de comuna como fallback de lat/lng (geocoding real es Fase 3), crea local en estado `pending`, revalida y redirige a `/perfil?nuevo=1`.
+- ✅ `/perfil` real: auth guard, tarjeta de identidad (avatar con iniciales + nombre + email), banner "tu picá está en revisión" cuando llega `?nuevo=1`, botón "cerrar sesión" via Server Action `signOutAction`. Stats reales (reseñas / favoritos / aportes) leídos con `getUserStats` (reviewCount denormalizado + count(*) en favorites/places).
+- ⏳ Faltan: integrar storage de fotos (Cloudflare R2 / Supabase), edición/borrado de reseña propia, geocoding real en `/agregar`
 
 ### Fase 3 — MVP funcional
-- Mapa con MapLibre + clusters
-- Geolocalización del usuario para `getPlacesNearby` real
-- Sistema de moderación (panel admin para aprobar/rechazar locales pending)
-- Integración real de upload de fotos (R2/Supabase)
+- ✅ Geolocalización del usuario en el home: cookie `hb_geo` (1 día, SameSite=Lax, ≈18 bytes), botón opt-in `<UseLocationButton />` que pide `navigator.geolocation` y refresca via router. Server lee cookie con `cookies()`, pasa coords a `getPlacesNearby({ lat, lng, radiusM: 15000 })`. PlaceCard ya muestra distancia cuando viene seteada.
+- ✅ Sistema de moderación: schema con `users.role` (`user` | `admin`, default `user`), JWT y session propagan el rol. Layout `/admin/*` con guard de rol. `/admin/moderacion` lista los places `pending` ordenados por más viejo, con botones aprobar/rechazar (server actions invalidan caches). Bootstrap del primer admin: `UPDATE users SET role = 'admin' WHERE email = '...'` + relogin.
+- ✅ Mapa con MapLibre + clusters: `/buscar?vista=mapa` renderiza `<PlacesMap />` (client). Default usa OSM raster (CORS abierto, sin API key, ok para dev). Si se setea `NEXT_PUBLIC_PMTILES_URL` en `.env.local`, cambia a PMTiles vectoriales + protomaps theme "light" (importes lazy condicionales). El demo bucket público de Protomaps NO tiene CORS abierto a localhost — para usar PMTiles hay que self-hostear el `.pmtiles` regional en R2/CDN. Pins mostaza, clusters carbón con texto crema (count solo en modo PMTiles), click pin abre popup con link al detalle, click cluster hace zoom. fitBounds automático cuando hay >1 pin.
+- ✅ Storage de fotos en Cloudflare R2: dep `aws4fetch` (5KB, recomendado por Cloudflare en vez de aws-sdk). Server action `requestUploadUrl` valida sesión + zod (jpg/png/webp, máx 8MB) y retorna presigned PUT URL de 5min. Cliente sube directo a R2 (sin proxy por el server). `<PhotoUploader />` (client component) con preview, eliminar, máx N fotos. Wired en /calificar (4 fotos máx) y /agregar paso 3 (4 fotos máx). createReview y createPlace ya guardan el array `photos` con las URLs públicas. `next.config.ts` lee `R2_PUBLIC_URL` y agrega el hostname a `images.remotePatterns` automáticamente.
 
 ### Fase 4 — SEO & PWA
 - Schema.org JSON-LD en `/[comuna]/[slug]` (Restaurant + LocalBusiness + AggregateRating)
@@ -410,14 +412,32 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-Lo más natural a hacer después de esto, en orden:
+**Estado al 2026-05-06**: Fases 0, 1, 2 y 3 cerradas. Listo para deploy.
 
-1. **Conectar `/agregar` a `createPlace`** — convertir el wizard en una Server Action que llame al service. Validar input con zod (definir el schema del wizard). Hoy el wizard es placeholder visual.
-2. **Sign-out + perfil real** — agregar Server Action `signOut()` y botón en `/perfil`. La page del perfil hoy es placeholder; puede mostrar el nombre del usuario logueado, contador de reseñas y el botón.
-3. **Edición/borrado de reseña** — hoy `submitReview` rebota con error si el usuario ya reseñó el local (unique constraint). Falta UI para editar la propia o borrarla (`deleteReview` ya existe en el service).
-4. **Geolocalización del navegador** en la home: pedir `navigator.geolocation`, pasar lat/lng a `getPlacesNearby({ lat, lng })`.
-5. **Storage de fotos** — decidir entre Supabase Storage y Cloudflare R2, agregar el upload al wizard de agregar y al form de calificar.
-6. **Schema.org JSON-LD** en `/[comuna]/[slug]` — está marcado como TODO en el código.
+### Próximo: provisionar infra (planeado 2026-05-07)
+
+Owner: usuario. Stack: VPS propia + Cloudflare R2 + Vercel. Pasos detallados en la sección "Es hora de montar la infra" del último mensaje del chat anterior. Resumen:
+
+1. **DB**: Postgres+PostGIS en VPS (Docker o nativo). `pnpm db:push && pnpm db:postgis && pnpm db:seed`. SSL obligatorio para Vercel.
+2. **R2**: bucket `hambuscador-photos`, API token con Read+Write, custom domain (`photos.tudominio.cl`), CORS abierto a localhost+prod domain.
+3. **Dominio**: registrar (recomendado Cloudflare Registrar). DNS apuntando dominio raíz → Vercel, subdominio photos → R2.
+4. **Vercel**: import del repo, env vars (AUTH_SECRET nuevo, DATABASE_URL, R2_*, NEXT_PUBLIC_SITE_URL, opcional Google OAuth y NEXT_PUBLIC_PMTILES_URL).
+5. **Bootstrap admin**: `UPDATE users SET role = 'admin' WHERE email = '...'` + relogin para JWT.
+
+### Pendientes de código (post-deploy)
+
+1. **Edición/borrado de reseña propia** — hoy `submitReview` rebota si el usuario ya reseñó el local. Falta UI para editar/borrar la propia (`deleteReview` ya existe en el service).
+2. **Listas de actividad en `/perfil`** — hoy muestra counts. Próximo: tabs/secciones con las reseñas, favoritos y aportes del usuario (links navegables a cada local).
+3. **Geocoding real en `/agregar`** — hoy lat/lng = centroide de la comuna. Próximo: autocomplete con nominatim (sin API key) o Google Places, usuario confirma el pin en un mini-mapa.
+4. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
+
+### Fase 4 — SEO & PWA (post-deploy)
+
+- **Schema.org JSON-LD** en `/[comuna]/[slug]` (Restaurant + LocalBusiness + AggregateRating).
+- **Sitemap dinámico** desde DB (`src/app/sitemap.ts`).
+- **OG images dinámicas** (`/api/og/[slug]/route.ts`).
+- **Service worker** + offline básico.
+- **Core Web Vitals** target 90+.
 
 ## Recursos
 

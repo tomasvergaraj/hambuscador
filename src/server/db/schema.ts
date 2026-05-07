@@ -17,6 +17,14 @@ import {
 // Ver: https://authjs.dev/getting-started/adapters/drizzle
 // ============================================================================
 
+/**
+ * Rol de usuario. `admin` accede a `/admin/*` (panel de moderación).
+ * Para nombrar a alguien admin: `UPDATE users SET role = 'admin' WHERE email = '...'`
+ * (después tiene que reloguearse para que el JWT recoja el nuevo rol).
+ */
+export const userRoleEnum = ["user", "admin"] as const;
+export type UserRole = (typeof userRoleEnum)[number];
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name"),
@@ -28,6 +36,7 @@ export const users = pgTable("users", {
   username: text("username").unique(), // ej. @camila — público en /u/camila
   hashedPassword: text("hashed_password"), // null si solo tiene OAuth
   bio: text("bio"),
+  role: text("role", { enum: userRoleEnum }).notNull().default("user"),
   reviewCount: integer("review_count").notNull().default(0),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { PlaceCard } from "@/components/place/place-card";
+import { PlacesMap } from "@/components/place/places-map";
 import { Chip } from "@/components/ui/chip";
 import { SearchBar } from "@/components/ui/search-bar";
 import { searchPlaces } from "@/lib/data";
@@ -101,7 +102,11 @@ export default async function BuscarPage({
         </section>
       ) : (
         <section className="px-4 pb-6">
-          <MapPlaceholder />
+          {results.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <PlacesMap places={results} />
+          )}
         </section>
       )}
 
@@ -115,21 +120,7 @@ function EmptyState() {
   return (
     <div className="text-center py-12 text-tinta-suave">
       <p className="font-display font-semibold text-base text-carbon">no encontramos picás</p>
-      <p className="text-xs mt-1">probá con otros filtros o agregá la que falta</p>
-    </div>
-  );
-}
-
-function MapPlaceholder() {
-  // TODO Fase 3: integrar MapLibre con tiles de Stadia/Protomaps y pins reales
-  return (
-    <div className="bg-crema-deep border border-crema-edge rounded-xl h-96 flex items-center justify-center text-center px-6">
-      <div>
-        <p className="font-display font-semibold text-sm text-carbon">vista de mapa</p>
-        <p className="text-xs text-tinta-suave mt-2">
-          se conectará en Fase 3 con MapLibre + clusters
-        </p>
-      </div>
+      <p className="text-xs mt-1">prueba con otros filtros o agrega la que falta</p>
     </div>
   );
 }

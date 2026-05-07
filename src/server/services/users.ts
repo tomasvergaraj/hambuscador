@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
-import { users, type DbUser } from "@/server/db/schema";
+import { favorites, places, users, type DbUser } from "@/server/db/schema";
 
 // ============================================================================
 // API pública del servicio de usuarios
@@ -66,4 +66,46 @@ export async function getUserById(id: string): Promise<DbUser | null> {
   const db = getDb();
   const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return row ?? null;
+}
+
+export type UserStats = {
+  reviewCount: number;
+  favoriteCount: number;
+  placeCount: number;
+};
+
+/**
+ * Conteos para el perfil. `reviewCount` viene del contador denormalizado;
+ * `favoriteCount` y `placeCount` se calculan con count(*).
+ *
+ * En modo demo retorna ceros — la page de perfil ya redirige a login antes
+ * de llegar acá, así que es solo defensivo.
+ */
+export async function getUserStats(userId: string): Promise<UserStats> {
+  if (!isDbConfigured()) {
+    return { reviewCount: 0, favoriteCount: 0, placeCount: 0 };
+  }
+
+  const db = getDb();
+  const [userRow, favRow, placeRow] = await Promise.all([
+    db
+      .select({ reviewCount: users.reviewCount })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+    db
+      .select({ count: count() })
+      .from(favorites)
+      .where(eq(favorites.userId, userId)),
+    db
+      .select({ count: count() })
+      .from(places)
+      .where(eq(places.submittedBy, userId)),
+  ]);
+
+  return {
+    reviewCount: userRow[0]?.reviewCount ?? 0,
+    favoriteCount: Number(favRow[0]?.count ?? 0),
+    placeCount: Number(placeRow[0]?.count ?? 0),
+  };
 }
