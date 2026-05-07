@@ -148,7 +148,7 @@ export function searchPlacesMock(
     priceRanges?: string[];
     comunaSlug?: string;
     openNow?: boolean;
-    sort?: "rating" | "recent" | "distance";
+    sort?: "rating" | "recent" | "distance" | "popularity";
     userCoords?: { lat: number; lng: number };
   },
 ): { items: Place[]; usedFuzzy: boolean } {
@@ -201,6 +201,8 @@ export function searchPlacesMock(
     });
   } else if (filters?.sort === "recent") {
     result = [...result];
+  } else if (filters?.sort === "popularity") {
+    result = [...result].sort((a, b) => bayesMock(b) - bayesMock(a));
   } else {
     result = [...result].sort((a, b) => b.rating - a.rating);
   }

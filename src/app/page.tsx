@@ -1,3 +1,4 @@
+import { IconList } from "@tabler/icons-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
@@ -92,6 +93,27 @@ export default async function HomePage() {
             ver todo →
           </Link>
         </div>
+      </section>
+
+      {/* CTA picas curadas */}
+      <section className="px-4 mt-6">
+        <Link
+          href="/picas"
+          className="block bg-carbon text-crema rounded-2xl px-4 py-4 transition-[transform,colors] duration-150 active:scale-[0.99] hover:bg-carbon-soft"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-mostaza/20 inline-flex items-center justify-center text-mostaza shrink-0">
+              <IconList size={22} stroke={2} aria-hidden="true" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-sm">listas para no errarle</p>
+              <p className="text-xs text-crema-deep/80 mt-0.5">
+                top smash, veggie, baratas, para celebrar
+              </p>
+            </div>
+            <span className="text-mostaza font-medium text-sm shrink-0">ver →</span>
+          </div>
+        </Link>
       </section>
 
       {recent.length > 0 && (

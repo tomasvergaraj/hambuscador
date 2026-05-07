@@ -20,6 +20,10 @@ import {
   getRecentlyApprovedPlaces as getRecentlyApprovedPlacesSvc,
   searchPlaces as searchPlacesSvc,
 } from "@/server/services/places";
+import {
+  getPlacesForPicasList as getPlacesForPicasListSvc,
+  getPicasListsWithCounts as getPicasListsWithCountsSvc,
+} from "@/server/services/picas";
 import { getReviewsByPlaceId as getReviewsByPlaceIdSvc } from "@/server/services/reviews";
 import {
   MOCK_PLACES,
@@ -97,6 +101,28 @@ export const getRecentlyApprovedPlaces = cache(
   },
   ["places-recent"],
   { revalidate: 120, tags: ["places"] },
+);
+
+/**
+ * Picas (listas curadas) — resolución de criteria → places ordenados por popularidad.
+ * Cache larga porque las listas son hardcoded y los places cambian poco.
+ */
+export const getPlacesForPicasList = cache(
+  async (slug: string) => {
+    const { getPicasListBySlug } = await import("@/lib/picas");
+    const list = getPicasListBySlug(slug);
+    if (!list) return null;
+    const places = await getPlacesForPicasListSvc(list);
+    return { list, places };
+  },
+  ["picas-list-by-slug"],
+  { revalidate: 300, tags: ["places"] },
+);
+
+export const getPicasListsWithCounts = cache(
+  async () => getPicasListsWithCountsSvc(),
+  ["picas-lists-counts"],
+  { revalidate: 300, tags: ["places"] },
 );
 
 /**

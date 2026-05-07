@@ -3,6 +3,8 @@
 import { IconDownload, IconX } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
+import { Logo } from "@/components/brand/logo";
+
 // =============================================================================
 // PwaInstaller — registra el service worker y muestra un toast con
 // "instalar app" cuando el browser dispara `beforeinstallprompt`.
@@ -92,9 +94,8 @@ export function PwaInstaller() {
   return (
     <div className="fixed bottom-20 left-4 right-4 z-50 sm:left-auto sm:right-4 sm:w-80 animate-[slideUp_0.25s_ease-out]">
       <div className="bg-carbon text-crema rounded-xl shadow-lg p-3 flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-mostaza shrink-0 flex items-center justify-center text-xl">
-          🍔
-        </div>
+        <Logo variant="icon" size={40} className="shrink-0 rounded-lg overflow-hidden" />
+
         <div className="flex-1 min-w-0">
           <p className="font-display font-semibold text-sm">
             instala hambuscador

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { PICAS_LISTS } from "@/lib/picas";
 import { getApprovedSlugs } from "@/server/services/places";
 
 // ============================================================================
@@ -39,7 +40,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.5,
     },
+    {
+      url: `${SITE_URL}/picas`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.85,
+    },
   ];
+
+  const picasRoutes: MetadataRoute.Sitemap = PICAS_LISTS.map((l) => ({
+    url: `${SITE_URL}/picas/${l.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  }));
 
   const placeRoutes: MetadataRoute.Sitemap = slugs.map((p) => ({
     url: `${SITE_URL}/${p.comunaSlug}/${p.slug}`,
@@ -48,5 +62,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...placeRoutes];
+  return [...staticRoutes, ...picasRoutes, ...placeRoutes];
 }

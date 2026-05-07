@@ -191,9 +191,13 @@ export async function searchPlaces(opts: {
   cuisines?: string[];
   priceRanges?: string[];
   openNow?: boolean;
-  sort?: "rating" | "recent" | "distance";
+  sort?: "rating" | "recent" | "distance" | "popularity";
   userCoords?: { lat: number; lng: number };
   limit?: number;
+  /** Filtro adicional por bayes rating mínimo. Útil para listas curadas. */
+  minBayesRating?: number;
+  /** Solo locales aprobados en los últimos N días (sección "recién agregadas"). */
+  approvedWithinDays?: number;
 }): Promise<SearchResult> {
   if (!isDbConfigured()) {
     return searchPlacesMock(opts.query ?? "", {
@@ -215,6 +219,8 @@ export async function searchPlaces(opts: {
     sort = "rating",
     userCoords,
     limit = 30,
+    minBayesRating,
+    approvedWithinDays,
   } = opts;
   const db = getDb();
   const { groups, phrase } = tokenizeQuery(query ?? "");
@@ -233,6 +239,22 @@ export async function searchPlaces(opts: {
 
   if (priceRanges && priceRanges.length > 0) {
     baseConditions.push(inArray(places.priceRange, priceRanges));
+  }
+
+  if (typeof approvedWithinDays === "number" && approvedWithinDays > 0) {
+    baseConditions.push(
+      sql`approved_at >= NOW() - INTERVAL '1 day' * ${approvedWithinDays}`,
+    );
+  }
+
+  if (typeof minBayesRating === "number" && minBayesRating > 0) {
+    // Bayes inline: prior C=5, μ=4.0. Si review_count = 0, bayes = 4.0.
+    baseConditions.push(
+      sql`(
+        (COALESCE(${places.reviewCount}, 0)::numeric * COALESCE(${places.ratingAvg}, 4.0) + 5 * 4.0)
+        / (COALESCE(${places.reviewCount}, 0) + 5)
+      ) >= ${minBayesRating}`,
+    );
   }
 
   // Helper para correr la query con un set de condiciones; encapsula el
@@ -257,7 +279,14 @@ export async function searchPlaces(opts: {
       return rows.map((r) => dbPlaceToUi(r.place, Number(r.distanceM)));
     }
     const fallbackOrder =
-      sort === "recent" ? sql`created_at DESC` : sql`rating_avg DESC NULLS LAST`;
+      sort === "recent"
+        ? sql`created_at DESC`
+        : sort === "popularity"
+          ? sql`(
+              (COALESCE(review_count, 0)::numeric * COALESCE(rating_avg, 4.0) + 5 * 4.0)
+              / (COALESCE(review_count, 0) + 5)
+            ) DESC, review_count DESC, rating_avg DESC NULLS LAST`
+          : sql`rating_avg DESC NULLS LAST`;
     const rows = await db
       .select()
       .from(places)
