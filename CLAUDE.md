@@ -412,9 +412,9 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-07**: Fases 0, 1, 2, 3 cerradas. **MVP en producción** en `https://hambuscador.vercel.app`.
+**Estado al 2026-05-07 (sesión 2)**: Fases 0, 1, 2, 3 cerradas + **Fase 4 (SEO + PWA) casi completa**. **MVP en producción** en `https://hambuscador.vercel.app`.
 
-### Deploy actual (2026-05-07)
+### Deploy actual
 
 Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB porque la latencia Vercel→VPS y la falta de PostGIS en la imagen postgres existente lo desaconsejaban).
 
@@ -431,37 +431,101 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 **Env vars en Vercel** (las reales viven en Vercel → Project Settings → Environment Variables, NO en este repo):
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`.
 
-**DB inicializada** vía Docker en VPS (Node 20 alpine + pnpm) corriendo `db:push --force` + `db:postgis` + `db:seed`. 12 hamburgueserías de Quillota cargadas. Usuario seed: `seed-camila@hambuscador.cl` / `hambuscador123`.
+**Importante**: `metadataBase` (en `src/app/layout.tsx`) y todos los SITE_URL del código leen `NEXT_PUBLIC_SITE_URL`. Mientras vivamos en `*.vercel.app`, esa env debe apuntar ahí (sino los OG images apuntan a un dominio inexistente y WhatsApp no muestra preview).
 
-### Fixes hechos en esta sesión
+**DB inicializada** vía Docker en VPS corriendo `db:push --force` + `db:postgis` + `db:seed`. 12 hamburgueserías de Quillota cargadas. Usuarios seed (solo dev):
+- `seed-camila@hambuscador.cl` / `hambuscador123` — usuario común
+- `seed-admin@hambuscador.cl` / `hambuscador123` — admin (creado en seed para entrar a `/admin/*` sin SQL manual)
 
-- **2026-05-07** `feat(place): mostrar rango de precio con descripción legible` — el `$$` aparecía solo en una línea de metadatos chiquita sin contexto. Ahora hay info row con `IconCash` y descripción "$7.000 — $12.000 por persona" en `[comuna]/[slug]/page.tsx`.
+**Migraciones aplicadas a mano en Neon prod** (drizzle-kit no corre en Vercel build):
+- `drizzle/2026-05-07-hours-by-day-banned-cursor.sql` — `places.hours_by_day` jsonb, `users.banned_at` timestamptz, índice cursor `reviews_created_at_idx`. Ya en prod ✅.
+
+Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
+
+### Hecho en esta sesión (2026-05-07 sesión 2)
+
+#### Reseñas / favoritos / perfil
+- ✅ Editar y borrar reseña propia (sección "tu reseña" destacada en ficha + form prefilled)
+- ✅ Botón corazón funcional (toggle `addFavorite`/`removeFavorite`)
+- ✅ Botón compartir con Web Share API + fallback a clipboard
+- ✅ `/perfil` con tabs `?tab=resenas|favoritos|aportes` y listas con cards linkeables
+- ✅ Back arrow del detail page con `IconArrowLeft` (antes era `IconShare` rotado, raro)
+
+#### Wizard /agregar
+- ✅ Geocoding real con Nominatim (sin API key) + mini-mapa con pin draggable
+- ✅ Horario por día (jsonb `hours_by_day`) con UI de switches + time pickers (`<DaysSchedule>`)
+- ✅ Validación de duplicado nombre+comuna ANTES de avanzar al paso 2
+- ✅ Referencia visual de precios bajo los chips $-$$$$
+- ✅ Bug fix: `<Field>` era `<label>` y se asociaba al primer input (click en cualquier área del campo activaba el primer chip / switch). Ahora es `<div>` con `<span>` title
+- ✅ Bug fix: cambiar `type=button → type=submit` en el mismo botón disparaba submit accidental al pasar al paso 3. Fix con `key="next"` vs `key="submit"`
+
+#### Detail page
+- ✅ Render del horario por día (lista de 7 días con día actual destacado, fallback a texto resumen para locales legacy)
+- ✅ JSON-LD Restaurant (Schema.org) — name, address, geo, openingHoursSpecification (mapea hours_by_day a Monday..Sunday), aggregateRating, sameAs
+
+#### Admin
+- ✅ Tab "reseñas" en `/admin/resenas` con cursor pagination (índice `reviews_created_at_idx`) y action borrar como admin
+- ✅ Tab "usuarios" en `/admin/usuarios` con cursor pagination + búsqueda por email/nombre + acciones inline: hacer admin / quitar admin · banear / reactivar
+- ✅ Auth.js rechaza login (Credentials) y rechaza signIn (Google) si `users.banned_at` está seteado
+- ✅ Auto-protección server-side: no podés auto-banearte ni auto-degradarte
+
+#### SEO
+- ✅ `src/app/sitemap.ts` dinámico (rutas estáticas + 1 por place aprobado, lastModified=updated_at). Refresh: `revalidate=3600` + `revalidatePath("/sitemap.xml")` al aprobar
+- ✅ `src/app/robots.ts` con disallow para áreas privadas
+- ✅ `src/app/[comuna]/[slug]/opengraph-image.tsx` — OG image dinámica 1200×630 con Bricolage Grotesque (cargada de Google Fonts en runtime con UA vacío para forzar TTF — Satori en next/og NO soporta woff2 en Node), hero con foto del local o fallback ilustrado (gradient mostaza + watermark del nombre + 🍔 grande)
+
+#### Mapa
+- ✅ `/buscar?vista=mapa` ahora es fullscreen (`fixed inset-0`) con header/toggle/contador flotando con backdrop-blur
+- ✅ Marker "blue dot" del usuario desde la cookie `hb_geo`
+- ✅ `<LocateMeButton>` flotante con `flyTo` animado (essential: true para reduce-motion)
+- ✅ Quitamos los controles `+/-` (gestos pinch/wheel suficientes)
+- ✅ Popup del pin con CTA estilo button mostaza
+- ✅ Fix: `ResizeObserver` al container + wrapper interno con inline `style={{ width: 100%, height: 100% }}` para derrotar la regla `.maplibregl-map { position: relative }` que pisaba nuestras clases Tailwind y dejaba el canvas en 0×0
+
+#### PWA / instalación
+- ✅ Manifest mejorado (iconos maskable, categories, shortcuts long-press)
+- ✅ `public/sw.js` — service worker vanilla con estrategias por tipo (HTML network-first, /_next/static cache-first, imágenes/fonts SWR, /api/admin/auth network-only)
+- ✅ `<PwaInstaller>` registra el SW en producción y muestra toast on-brand cuando dispatchea `beforeinstallprompt` (Chrome). Fix: `sessionStorage` evita que reaparezca en cada navegación cliente
+- ✅ Página `/offline` como fallback del SW
+
+#### UI / branding
+- ✅ Animaciones de press (`active:scale-X` + transition) en Button, Chip, BottomNav tabs, Header buttons, PlaceCard, cards de listas en perfil, icon buttons del detail page
+- ✅ Indicador de tab activo en BottomNav (pill mostaza 2×20px debajo del label)
+- ✅ Footer sutil "desarrollado por nexo software" en BottomNav linkeado a `https://nexosoftware.cl`
+- ✅ Logo SVG en README
+
+#### Voz / contenido
+- ✅ Barrido de argentinismos en error messages (definilo→defínelo, levantá→inicia, configurá→configura, probá→prueba/intenta, tocá→toca, elegí→elige)
 
 ### Próximos pasos pendientes
 
 #### Deploy / infra
 1. **Comprar dominio `hambuscador.cl`** en NIC.cl. Después: agregar en Vercel → Domains, configurar DNS (`A @ 76.76.21.21`, `CNAME www cname.vercel-dns.com`), actualizar env vars `AUTH_URL` y `NEXT_PUBLIC_SITE_URL`, agregar redirect URI en Google OAuth, agregar origin en CORS de R2.
 2. **Custom domain en R2** → conectar `photos.hambuscador.cl` al bucket, actualizar `R2_PUBLIC_URL`.
-3. **Bootstrap admin**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = '...'` → cerrar sesión y reloguearse (rol viaja en JWT).
-4. **Bug `/picas` 404**: hay un link en [src/app/page.tsx:91](src/app/page.tsx#L91) (`href="/picas"`) que apunta a una ruta que no existe. Decidir: crear la página de listas o quitar el link.
-5. **CORS R2 verificado**: si los uploads desde el navegador siguen rebotando con CORS preflight, revisar que el bucket tenga la policy con `AllowedOrigins: ["http://localhost:3000", "https://hambuscador.vercel.app"]`, `AllowedMethods: ["PUT", "GET"]`, `AllowedHeaders: ["*"]`, `ExposeHeaders: ["ETag"]`.
+3. **Bootstrap admin REAL en prod**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = '...'` → cerrar sesión y reloguearse. (`seed-admin@hambuscador.cl` solo existe en dev.)
+4. **CORS R2 verificado**: si los uploads desde el navegador rebotan con CORS preflight, revisar que el bucket tenga la policy con `AllowedOrigins: ["http://localhost:3000", "https://hambuscador.vercel.app"]`, `AllowedMethods: ["PUT", "GET"]`, `AllowedHeaders: ["*"]`, `ExposeHeaders: ["ETag"]`.
+5. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
 
-#### Código (post-deploy)
+#### Código
 
-1. **Edición/borrado de reseña propia** — hoy `submitReview` rebota si el usuario ya reseñó el local. Falta UI para editar/borrar la propia (`deleteReview` ya existe en el service).
-2. **Listas de actividad en `/perfil`** — hoy muestra counts. Próximo: tabs/secciones con las reseñas, favoritos y aportes del usuario (links navegables a cada local).
-3. **Geocoding real en `/agregar`** — hoy lat/lng = centroide de la comuna. Próximo: autocomplete con nominatim (sin API key) o Google Places, usuario confirma el pin en un mini-mapa.
-4. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
-5. **Página `/picas`** (listas curadas, ej: "Las mejores smash de Stgo") — referenciada en home pero no existe.
-6. **Admin extendido**: hoy solo modera locales. Sumar moderación de reseñas, ban/promote de usuarios, edición de locales aprobados.
+1. **Página `/picas`** (listas curadas, ej: "Top smash de Stgo", "Mejores de Quillota") — el link del home se removió en esta sesión, falta crear la página con queries por filtro y decidir criterios curatoriales.
+2. **Filtros funcionales en `/buscar`** — los chips "abierto", "$$ o menos", "smash" son decorativos. Hacerlos clickeables, persistir en URL, afectar la query.
+3. **Notificaciones por correo al admin** cuando alguien sube un local — hoy hay que entrar manualmente a `/admin/moderacion` para chequear.
+4. **Edición de locales aprobados** desde el admin (errores de tipeo, fotos faltantes, dueño que reclama).
+5. **Moderación retroactiva**: cuando se banea un usuario, sus reseñas existentes quedan visibles. Decidir si ocultarlas o mantenerlas (por ahora se mantienen — ban es preventivo).
+6. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
 
-### Fase 4 — SEO & PWA (post-deploy)
+#### Fase 5 — engagement (nada empezado)
 
-- **Schema.org JSON-LD** en `/[comuna]/[slug]` (Restaurant + LocalBusiness + AggregateRating).
-- **Sitemap dinámico** desde DB (`src/app/sitemap.ts`).
-- **OG images dinámicas** (`/api/og/[slug]/route.ts`).
-- **Service worker** + offline básico.
-- **Core Web Vitals** target 90+.
+- Sistema de favoritos público (perfil de otro usuario, ver sus favoritos)
+- Notificaciones push
+- Compartir reseñas (no solo locales)
+- Compartir vía deep links
+
+#### Optimización
+
+- **Core Web Vitals** target 90+ (PageSpeed Insights audit pendiente)
+- **Lighthouse PWA score** verificar que pasa toda la check (offline, installable, manifest)
 
 ## Recursos
 
