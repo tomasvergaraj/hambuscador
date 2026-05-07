@@ -61,6 +61,9 @@ function buildProviders() {
         const ok = await bcrypt.compare(parsed.data.password, user.hashedPassword);
         if (!ok) return null;
 
+        // Usuarios baneados no pueden iniciar sesión
+        if (user.bannedAt) return null;
+
         return {
           id: user.id,
           email: user.email,
@@ -105,6 +108,16 @@ export const authConfig: NextAuthConfig = {
   },
 
   callbacks: {
+    /**
+     * Bloqueo de baneados: para Credentials ya rechazamos en authorize, pero
+     * los OAuth (Google) llegan acá directo. Si el row del adapter trae
+     * bannedAt seteado, rechazamos el sign-in.
+     */
+    async signIn({ user }) {
+      const banned = (user as { bannedAt?: Date | string | null }).bannedAt;
+      if (banned) return false;
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

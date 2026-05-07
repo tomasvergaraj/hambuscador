@@ -29,6 +29,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ← volver al sitio
         </Link>
       </header>
+      <nav
+        aria-label="secciones admin"
+        className="bg-carbon-soft text-crema-edge border-b border-carbon flex gap-3 px-4"
+      >
+        <Link
+          href="/admin/moderacion"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          locales pendientes
+        </Link>
+        <Link
+          href="/admin/resenas"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          reseñas
+        </Link>
+        <Link
+          href="/admin/usuarios"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          usuarios
+        </Link>
+      </nav>
       {children}
     </div>
   );
