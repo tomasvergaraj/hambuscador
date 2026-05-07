@@ -1,4 +1,4 @@
-import { IconBrandInstagram, IconClock, IconFlame, IconMapPin, IconPhone, IconPhoto, IconShare, IconHeart } from "@tabler/icons-react";
+import { IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPhone, IconPhoto, IconShare, IconHeart } from "@tabler/icons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
 import { getPlaceBySlug, getReviewsByPlaceId } from "@/lib/data";
+import { PRICE_RANGES } from "@/lib/constants";
+
+const priceDescription = new Map(PRICE_RANGES.map((p) => [p.id, p.description]));
 
 type Params = { comuna: string; slug: string };
 
@@ -106,7 +109,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               {place.name}
             </h1>
             <p className="text-xs text-tinta-suave mt-1">
-              {place.cuisines.join(" · ")} · {place.comunaLabel} · {place.priceRange}
+              {place.cuisines.join(" · ")} · {place.comunaLabel}
             </p>
           </div>
           <StatusPill status={place.status} />
@@ -130,6 +133,15 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             <IconClock size={16} className="text-bronceado shrink-0" aria-hidden="true" />
             <span>
               {place.hours.weekdays} · lun-vie · sáb-dom {place.hours.weekends}
+            </span>
+          </li>
+          <li className="flex items-center gap-3 text-sm text-carbon">
+            <IconCash size={16} className="text-bronceado shrink-0" aria-hidden="true" />
+            <span>
+              <span className="font-semibold">{place.priceRange}</span>
+              {priceDescription.get(place.priceRange)
+                ? ` — ${priceDescription.get(place.priceRange)} por persona`
+                : null}
             </span>
           </li>
           {place.specialty && (
