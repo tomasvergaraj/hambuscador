@@ -115,9 +115,13 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
     );
   }
 
-  const heroPhoto = place.photos[0];
   const cuisinesLabel = place.cuisines.slice(0, 3).join(" · ");
 
+  // ⚠️ Decisión: el hero SIEMPRE es el gradient con watermark, NUNCA la foto
+  // del local. Razón: next/og emite PNG y las fotos rasterizadas a PNG pesan
+  // ~600 KB+ por sí solas, lo que nos saca del límite recomendado de WhatsApp
+  // (<600 KB). El gradient comprime a ~80-150 KB con PNG.
+  // La foto del local queda como protagonista en la ficha real (/[comuna]/[slug]).
   return new ImageResponse(
     (
       <div
@@ -130,7 +134,6 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
           fontFamily: "Bricolage, system-ui, sans-serif",
         }}
       >
-        {/* Hero — foto del local o fallback ilustrado */}
         <div
           style={{
             height: 320,
@@ -138,23 +141,10 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
             display: "flex",
             position: "relative",
             overflow: "hidden",
-            background: heroPhoto
-              ? CARBON
-              : `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
+            background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
           }}
         >
-          {heroPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={heroPhoto}
-              alt=""
-              width={1200}
-              height={320}
-              style={{ objectFit: "cover", width: "100%", height: "100%" }}
-            />
-          ) : (
-            <NoPhotoHero name={place.name} />
-          )}
+          <NoPhotoHero name={place.name} />
 
           {/* Pill rating */}
           {place.rating > 0 && (
