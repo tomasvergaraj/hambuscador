@@ -4,6 +4,7 @@ import {
   IconHeart,
   IconLayoutDashboard,
   IconLogout,
+  IconRosetteDiscountCheckFilled,
   IconStar,
 } from "@tabler/icons-react";
 import Link from "next/link";
@@ -14,6 +15,7 @@ import { Header } from "@/components/nav/header";
 import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
+import { getMyOwnedPlaces } from "@/server/services/claims";
 import { countPendingPlaces } from "@/server/services/places";
 import {
   getMyFavorites,
@@ -70,7 +72,8 @@ export default async function PerfilPage({
 
   // Pedimos stats + user (para username) + la lista de la tab activa.
   // Si es admin sumamos count de pendientes para el badge del shortcut.
-  const [stats, dbUser, list, pendingCount] = await Promise.all([
+  // ownedPlaces lista locales reclamados aprobados — atajo a editar.
+  const [stats, dbUser, list, pendingCount, ownedPlaces] = await Promise.all([
     getUserStats(userId),
     getUserById(userId),
     tab === "resenas"
@@ -79,6 +82,7 @@ export default async function PerfilPage({
         ? getMyFavorites(userId)
         : getMySubmissions(userId),
     isAdmin ? countPendingPlaces() : Promise.resolve(0),
+    getMyOwnedPlaces(userId),
   ]);
 
   const showSubmittedBanner = nuevo === "1";
@@ -120,6 +124,43 @@ export default async function PerfilPage({
         </section>
 
         <UsernameSetter currentUsername={dbUser?.username ?? null} />
+
+        {/* Mis locales — visible si el user es owner verificado de al menos
+            uno. Cada item linkea al editor restringido. */}
+        {ownedPlaces.length > 0 && (
+          <section aria-label="mis locales" className="flex flex-col gap-2">
+            <h2 className="font-display font-semibold text-sm text-carbon px-1">
+              mis locales ({ownedPlaces.length})
+            </h2>
+            <ul className="flex flex-col gap-2">
+              {ownedPlaces.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/mi-local/${p.id}/editar`}
+                    className="flex items-center gap-3 bg-mostaza/10 border border-mostaza/30 rounded-lg p-3 hover:bg-mostaza/15 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98]"
+                  >
+                    <div className="w-9 h-9 rounded-md bg-mostaza text-carbon flex items-center justify-center shrink-0">
+                      <IconRosetteDiscountCheckFilled size={18} aria-hidden="true" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-carbon truncate">
+                        {p.name}
+                      </p>
+                      <p className="text-[11px] text-bronceado truncate">
+                        {p.comunaLabel} · editar ficha
+                      </p>
+                    </div>
+                    <IconChevronRight
+                      size={16}
+                      className="text-mostaza-deep shrink-0"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Acceso rápido al modo admin — solo para usuarios con role=admin.
             Carbon background + mostaza accent para que destaque del resto
