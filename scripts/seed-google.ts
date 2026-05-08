@@ -3,11 +3,13 @@
  *
  * Para correr:
  *   set -a && source .env.local && set +a
- *   GOOGLE_PLACES_API_KEY=... pnpm tsx scripts/seed-google.ts [--dry-run]
+ *   GOOGLE_PLACES_API_KEY=... pnpm tsx scripts/seed-google.ts [--dry-run] [--all]
  *
  * Flags:
  *   --dry-run  Muestra qué insertaría sin tocar la DB. Igual gasta API
  *              calls (Google cobra por request).
+ *   --all      Lee las 346 comunas oficiales de la tabla `comunas`. Sin
+ *              este flag usa solo PILOT_COMUNAS (4 comunas para test).
  *
  * Comportamiento:
  *  - Para cada comuna piloto, hace Text Search "hamburguesería en {comuna}, Chile".
@@ -216,6 +218,20 @@ async function placeExists(comunaSlug: string, slug: string): Promise<boolean> {
 // ============================================================================
 // Main
 // ============================================================================
+async function loadAllComunas(): Promise<typeof PILOT_COMUNAS> {
+  const db = getDb();
+  const rows = await db.execute<{
+    slug: string;
+    label: string;
+    region_label: string;
+  }>(sql`SELECT slug, label, region_label FROM comunas ORDER BY region_label, label`);
+  return rows.rows.map((r) => ({
+    slug: r.slug,
+    label: r.label,
+    region: r.region_label,
+  }));
+}
+
 async function main() {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
@@ -224,10 +240,18 @@ async function main() {
   }
 
   const dryRun = process.argv.includes("--dry-run");
-  const comunas = PILOT_COMUNAS;
+  const allComunas = process.argv.includes("--all");
+
+  const comunas = allComunas ? await loadAllComunas() : PILOT_COMUNAS;
+  if (comunas.length === 0) {
+    console.error("No hay comunas para procesar — ¿está poblada la tabla `comunas`?");
+    process.exit(1);
+  }
 
   console.log(`Modo: ${dryRun ? "DRY-RUN (no inserta)" : "WRITE (inserta en DB)"}`);
-  console.log(`Comunas piloto: ${comunas.map((c) => c.label).join(", ")}\n`);
+  console.log(
+    `Comunas: ${comunas.length} ${allComunas ? "(todas las oficiales)" : "(piloto)"}\n`,
+  );
 
   let totalFound = 0;
   let totalInserted = 0;
@@ -237,9 +261,11 @@ async function main() {
   let totalSkippedWrongComuna = 0;
   let totalRequests = 0;
 
+  let idx = 0;
   for (const comuna of comunas) {
+    idx += 1;
     const query = `hamburguesería en ${comuna.label}, Chile`;
-    console.log(`▸ ${comuna.label} — query "${query}"`);
+    console.log(`▸ [${idx}/${comunas.length}] ${comuna.label} (${comuna.region})`);
 
     let results: GooglePlace[];
     let requestCount: number;
@@ -249,10 +275,16 @@ async function main() {
       requestCount = r.requestCount;
     } catch (err) {
       console.error(`  ✗ error: ${(err as Error).message}`);
+      // Pequeño backoff por si fue rate limit; seguimos
+      await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     totalRequests += requestCount;
-    console.log(`  ✓ ${results.length} resultados (${requestCount} request${requestCount !== 1 ? "s" : ""})`);
+    if (results.length === 0) {
+      console.log(`  · 0 resultados`);
+    } else {
+      console.log(`  ✓ ${results.length} resultados (${requestCount} req)`);
+    }
 
     for (const g of results) {
       totalFound += 1;
