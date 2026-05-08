@@ -2,6 +2,7 @@ import {
   IconArrowLeft,
   IconBrandInstagram,
   IconBrandWhatsapp,
+  IconCamera,
   IconCash,
   IconClock,
   IconFlame,
@@ -9,7 +10,6 @@ import {
   IconPencil,
   IconPhone,
   IconRosetteDiscountCheckFilled,
-  IconShare,
   IconSparkles,
   IconTrash,
   IconHeart,
@@ -283,12 +283,21 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             >
               tu reseña
             </h2>
-            <article className="bg-crema-deep rounded-lg border border-mostaza/40 p-3">
+            <article className="bg-crema-deep rounded-lg border border-mostaza/40 p-3 relative transition-[transform,box-shadow] duration-150 active:scale-[0.99] hover:shadow-md">
+              {/* Stretched link — captura clicks en cualquier parte de la card
+                  que no sea un botón/link explícito (perfil, editar, borrar).
+                  z-10 transparent encima del contenido visible (z-auto); los
+                  controles que SÍ deben recibir click llevan z-20. */}
+              <Link
+                href={`/r/${mine.id}`}
+                aria-label="ver reseña completa"
+                className="absolute inset-0 z-10 rounded-lg"
+              />
               <header className="flex items-start justify-between gap-2 mb-2">
                 {mine.authorUsername ? (
                   <Link
                     href={`/u/${mine.authorUsername}`}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    className="relative z-20 flex items-center gap-2 hover:opacity-80 transition-opacity"
                   >
                     <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
                       {mine.authorInitials}
@@ -315,14 +324,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                     </div>
                   </div>
                 )}
-                <div className="flex items-center gap-1">
-                  <Link
-                    href={`/r/${mine.id}`}
-                    aria-label="ver y compartir"
-                    className="flex items-center justify-center w-8 h-8 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90"
-                  >
-                    <IconShare size={15} aria-hidden="true" />
-                  </Link>
+                <div className="relative z-20 flex items-center gap-1">
                   <Link
                     href={`/${place.comuna}/${place.slug}/calificar`}
                     aria-label="editar reseña"
@@ -347,6 +349,14 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               {mine.text && (
                 <p className="text-xs text-carbon leading-relaxed">{mine.text}</p>
               )}
+              {mine.photos.length > 0 && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-mostaza/15 text-mostaza-deep px-2 py-0.5 rounded-full">
+                    <IconCamera size={11} aria-hidden="true" />
+                    {mine.photos.length} {mine.photos.length === 1 ? "foto" : "fotos"}
+                  </span>
+                </div>
+              )}
             </article>
           </section>
         )}
@@ -366,13 +376,20 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               {others.slice(0, 2).map((review) => (
                 <article
                   key={review.id}
-                  className="bg-crema-deep rounded-lg border border-crema-edge p-3"
+                  className="bg-crema-deep rounded-lg border border-crema-edge p-3 relative transition-[transform,box-shadow] duration-150 active:scale-[0.99] hover:shadow-md"
                 >
+                  {/* Stretched link → /r/[id]. El link de perfil del autor
+                      lleva z-20 para ganar el click sobre el avatar/nombre. */}
+                  <Link
+                    href={`/r/${review.id}`}
+                    aria-label="ver reseña completa"
+                    className="absolute inset-0 z-10 rounded-lg"
+                  />
                   <header className="mb-2 flex items-start justify-between gap-2">
                     {review.authorUsername ? (
                       <Link
                         href={`/u/${review.authorUsername}`}
-                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        className="relative z-20 flex items-center gap-2 hover:opacity-80 transition-opacity"
                       >
                         <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
                           {review.authorInitials}
@@ -401,16 +418,17 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                         </div>
                       </div>
                     )}
-                    <Link
-                      href={`/r/${review.id}`}
-                      aria-label="ver reseña"
-                      className="flex items-center justify-center w-7 h-7 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90 shrink-0"
-                    >
-                      <IconShare size={13} aria-hidden="true" />
-                    </Link>
                   </header>
                   {review.text && (
                     <p className="text-xs text-carbon leading-relaxed">{review.text}</p>
+                  )}
+                  {review.photos.length > 0 && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-lechuga/15 text-lechuga-deep px-2 py-0.5 rounded-full">
+                        <IconCamera size={11} aria-hidden="true" />
+                        {review.photos.length} {review.photos.length === 1 ? "foto" : "fotos"}
+                      </span>
+                    </div>
                   )}
                 </article>
               ))}
