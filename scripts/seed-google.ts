@@ -107,6 +107,23 @@ const PRICE_MAP: Record<string, "$" | "$$" | "$$$" | "$$$$"> = {
 // Google API days: 0=Sunday..6=Saturday
 const DAY_KEYS_GOOGLE = ["dom", "lun", "mar", "mie", "jue", "vie", "sab"] as const;
 
+/**
+ * ¿Las coords están dentro de Chile? Mainland + islas oceánicas chilenas
+ * (Rapa Nui, Juan Fernández).
+ *
+ * Necesario porque queries como "hamburguesería en Cartagena, Chile" o
+ * "...en San Rafael, Chile" devuelven places en Cartagena CO, San Rafael
+ * MX, etc. (comunas con nombres comunes en Latam). El filtro de comuna
+ * en address no siempre los captura porque el address formateado de
+ * Google también dice "Cartagena".
+ */
+function isInsideChile(lat: number, lng: number): boolean {
+  const mainland = lat >= -56 && lat <= -17.5 && lng >= -76 && lng <= -66;
+  const rapaNui = lat >= -27.5 && lat <= -27 && lng >= -109.7 && lng <= -109.2;
+  const juanFernandez = lat >= -34 && lat <= -33.5 && lng >= -79 && lng <= -78.7;
+  return mainland || rapaNui || juanFernandez;
+}
+
 // ============================================================================
 // API helpers
 // ============================================================================
@@ -306,6 +323,7 @@ async function main() {
   let totalSkippedClosed = 0;
   let totalSkippedInvalid = 0;
   let totalSkippedWrongComuna = 0;
+  let totalSkippedOutsideChile = 0;
   let totalRequests = 0;
 
   let idx = 0;
@@ -345,6 +363,15 @@ async function main() {
       }
       if (g.businessStatus === "CLOSED_PERMANENTLY") {
         totalSkippedClosed += 1;
+        continue;
+      }
+
+      // Bbox check — descarta places fuera de Chile (Cartagena CO,
+      // San Rafael MX, etc.). Hace fallback más estricto que el address
+      // matching, que falla cuando el formattedAddress de Google también
+      // contiene la comuna queryada.
+      if (!isInsideChile(lat, lng)) {
+        totalSkippedOutsideChile += 1;
         continue;
       }
 
@@ -427,6 +454,7 @@ async function main() {
   console.log(`  Skip (cerrados):       ${totalSkippedClosed}`);
   console.log(`  Skip (sin coords):     ${totalSkippedInvalid}`);
   console.log(`  Skip (otra comuna):    ${totalSkippedWrongComuna}`);
+  console.log(`  Skip (fuera de Chile): ${totalSkippedOutsideChile}`);
   console.log(`  Requests Google:       ${totalRequests} → ~USD ${(totalRequests * 0.035).toFixed(3)}`);
 
   await closeDb();
