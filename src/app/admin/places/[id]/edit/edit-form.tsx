@@ -40,9 +40,12 @@ export function EditPlaceForm({ place }: { place: Place }) {
     deserializeSchedule(place.hours.byDay),
   );
   const [phone, setPhone] = useState(place.phone ?? "");
+  const [whatsapp, setWhatsapp] = useState(place.whatsapp ?? "");
   const [instagram, setInstagram] = useState(place.instagram ?? "");
+  const [website, setWebsite] = useState(place.website ?? "");
   const [photos, setPhotos] = useState<string[]>(place.photos);
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
+  const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
 
   const hoursByDayJson = JSON.stringify(serializeSchedule(schedule));
   const hoursWeekdays = summarizeWeekdays(schedule);
@@ -207,6 +210,16 @@ export function EditPlaceForm({ place }: { place: Place }) {
               className={inputCls}
             />
           </Field>
+          <Field label="whatsapp">
+            <input
+              type="text"
+              name="whatsapp"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder="+56 9 1234 5678"
+              className={inputCls}
+            />
+          </Field>
           <Field label="instagram">
             <input
               type="text"
@@ -214,6 +227,16 @@ export function EditPlaceForm({ place }: { place: Place }) {
               value={instagram}
               onChange={(e) => setInstagram(e.target.value)}
               placeholder="usuario sin @"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="sitio web">
+            <input
+              type="url"
+              name="website"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://ejemplo.cl"
               className={inputCls}
             />
           </Field>
@@ -243,6 +266,21 @@ export function EditPlaceForm({ place }: { place: Place }) {
         <p className="text-[11px] text-bronceado">
           el badge «verificado» aparece en la ficha y la card. úsalo para locales
           revisados manualmente.
+        </p>
+
+        <label className="inline-flex items-center gap-2 cursor-pointer mt-2">
+          <input
+            type="checkbox"
+            name="isFeatured"
+            checked={isFeatured}
+            onChange={(e) => setIsFeatured(e.target.checked)}
+            className="w-4 h-4 accent-mostaza"
+          />
+          <span className="text-sm text-carbon">destacado (publicidad)</span>
+        </label>
+        <p className="text-[11px] text-bronceado">
+          el local sale con pin diferenciado en el mapa. úsalo solo para locales
+          con publicidad activa.
         </p>
       </Section>
 

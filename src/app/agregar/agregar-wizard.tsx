@@ -45,7 +45,9 @@ export function AgregarWizard({ comunas }: { comunas: Comuna[] }) {
   const [specialty, setSpecialty] = useState("");
   const [schedule, setSchedule] = useState<ScheduleValue>(DEFAULT_SCHEDULE);
   const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [website, setWebsite] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
 
   // Validación step 1 → 2: chequea duplicado nombre+comuna en DB
@@ -123,7 +125,9 @@ export function AgregarWizard({ comunas }: { comunas: Comuna[] }) {
       <input type="hidden" name="hoursWeekends" value={hoursWeekends} />
       <input type="hidden" name="hoursByDay" value={hoursByDayJson} />
       <input type="hidden" name="phone" value={phone} />
+      <input type="hidden" name="whatsapp" value={whatsapp} />
       <input type="hidden" name="instagram" value={instagram} />
+      <input type="hidden" name="website" value={website} />
       {photos.map((url) => (
         <input key={url} type="hidden" name="photos" value={url} />
       ))}
@@ -295,12 +299,32 @@ export function AgregarWizard({ comunas }: { comunas: Comuna[] }) {
               />
             </Field>
 
+            <Field label="whatsapp (opcional)">
+              <input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="ej. +56 9 1234 5678"
+                className={INPUT_CLS}
+              />
+            </Field>
+
             <Field label="instagram (opcional)">
               <input
                 type="text"
                 value={instagram}
                 onChange={(e) => setInstagram(e.target.value)}
                 placeholder="ej. streatburger (sin @)"
+                className={INPUT_CLS}
+              />
+            </Field>
+
+            <Field label="sitio web (opcional)">
+              <input
+                type="url"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="ej. https://streatburger.cl"
                 className={INPUT_CLS}
               />
             </Field>

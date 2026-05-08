@@ -46,9 +46,18 @@ const editSchema = z.object({
       return undefined;
     }),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
+  whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
+  website: z
+    .string()
+    .trim()
+    .max(200)
+    .url("La URL del sitio web no es válida")
+    .optional()
+    .or(z.literal("")),
   photos: z.array(z.string().url()).max(6).default([]),
   isVerified: z.coerce.boolean().optional(),
+  isFeatured: z.coerce.boolean().optional(),
 });
 
 export type UpdatePlaceState = { error?: string; ok?: boolean };
@@ -89,9 +98,12 @@ export async function updatePlaceAction(
     hoursWeekends: formData.get("hoursWeekends"),
     hoursByDay: formData.get("hoursByDay"),
     phone: formData.get("phone"),
+    whatsapp: formData.get("whatsapp"),
     instagram: formData.get("instagram"),
+    website: formData.get("website"),
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
     isVerified: formData.get("isVerified") === "on",
+    isFeatured: formData.get("isFeatured") === "on",
   });
 
   if (!parsed.success) {
@@ -112,9 +124,12 @@ export async function updatePlaceAction(
     hoursWeekends: parsed.data.hoursWeekends || null,
     hoursByDay: parsed.data.hoursByDay ?? null,
     phone: parsed.data.phone || null,
+    whatsapp: parsed.data.whatsapp || null,
     instagram: parsed.data.instagram || null,
+    website: parsed.data.website || null,
     photos: parsed.data.photos,
     isVerified: parsed.data.isVerified ?? false,
+    isFeatured: parsed.data.isFeatured ?? false,
   });
 
   // Invalidar cache para que el público vea el cambio inmediato.

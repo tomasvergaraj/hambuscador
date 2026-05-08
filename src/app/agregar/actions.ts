@@ -60,7 +60,15 @@ const placeSchema = z.object({
       return undefined;
     }),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
+  whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
+  website: z
+    .string()
+    .trim()
+    .max(200)
+    .url("La URL del sitio web no es válida")
+    .optional()
+    .or(z.literal("")),
   photos: z.array(z.string().url()).max(4, "Máximo 4 fotos").default([]),
 });
 
@@ -107,7 +115,9 @@ export async function createPlaceAction(
     hoursWeekends: formData.get("hoursWeekends"),
     hoursByDay: formData.get("hoursByDay"),
     phone: formData.get("phone"),
+    whatsapp: formData.get("whatsapp"),
     instagram: formData.get("instagram"),
+    website: formData.get("website"),
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
   });
 
@@ -137,7 +147,9 @@ export async function createPlaceAction(
       hoursWeekends: parsed.data.hoursWeekends || undefined,
       hoursByDay: parsed.data.hoursByDay,
       phone: parsed.data.phone || undefined,
+      whatsapp: parsed.data.whatsapp || undefined,
       instagram: parsed.data.instagram || undefined,
+      website: parsed.data.website || undefined,
       photos: parsed.data.photos,
       submittedBy: session.user.id,
     });
