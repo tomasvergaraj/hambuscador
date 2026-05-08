@@ -91,6 +91,21 @@ const BURGER_PIN_FEATURED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="
   <path d="M14 25.5 L34 25.5 L34 28 C34 29.8 30 30.5 24 30.5 C18 30.5 14 29.8 14 28 Z" fill="#C8862A"/>
 </svg>`;
 
+// Cluster: forma de hamburguesa con patty oscura como fondo del count.
+// Comunica "muchos locales" por la propia metáfora visual + el número
+// (cuando hay glyphs disponibles, ej. PMTILES). El icon-size escala con
+// point_count para señalar la magnitud incluso sin texto.
+const BURGER_CLUSTER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 56 56">
+  <path d="M4 23 C4 12 12 4 28 4 C44 4 52 12 52 23 Z" fill="#E8A02C"/>
+  <ellipse cx="18" cy="14" rx="0.7" ry="1" fill="#FAF6EE"/>
+  <ellipse cx="28" cy="10" rx="0.7" ry="1" fill="#FAF6EE"/>
+  <ellipse cx="38" cy="14" rx="0.7" ry="1" fill="#FAF6EE"/>
+  <path d="M4 23 L52 23 L52 25 Q47 27 42 25 Q37 27 32 25 Q27 27 22 25 Q17 27 12 25 Q7 27 4 25 Z" fill="#6B8E4E"/>
+  <rect x="4" y="25" width="48" height="11" fill="#1F1B17"/>
+  <path d="M4 36 L52 36 L52 40 C52 47 44 52 28 52 C12 52 4 47 4 40 Z" fill="#C8862A"/>
+  <path d="M4 23 C4 12 12 4 28 4 C44 4 52 12 52 23 L52 40 C52 47 44 52 28 52 C12 52 4 47 4 40 Z" fill="none" stroke="#1F1B17" stroke-width="2"/>
+</svg>`;
+
 function loadSvgImage(svg: string, w: number, h: number): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image(w, h);
@@ -280,15 +295,19 @@ export function PlacesMap({ places, userCoords, className }: Props) {
         // Cargamos los SVG de pin ANTES del addLayer del symbol — sino la
         // capa se renderiza vacía hasta que las imágenes existan.
         try {
-          const [pin, pinFeatured] = await Promise.all([
+          const [pin, pinFeatured, cluster] = await Promise.all([
             loadSvgImage(BURGER_PIN_SVG, 80, 104),
             loadSvgImage(BURGER_PIN_FEATURED_SVG, 96, 120),
+            loadSvgImage(BURGER_CLUSTER_SVG, 112, 112),
           ]);
           if (!map.hasImage("burger-pin")) {
             map.addImage("burger-pin", pin, { pixelRatio: 2 });
           }
           if (!map.hasImage("burger-pin-featured")) {
             map.addImage("burger-pin-featured", pinFeatured, { pixelRatio: 2 });
+          }
+          if (!map.hasImage("burger-cluster")) {
+            map.addImage("burger-cluster", cluster, { pixelRatio: 2 });
           }
         } catch {
           // Si falla la carga (CSP rara), seguimos — MapLibre dibuja un
@@ -315,29 +334,32 @@ export function PlacesMap({ places, userCoords, className }: Props) {
         });
         sourceReadyRef.current = true;
 
+        // Cluster: symbol layer con SVG burger. icon-size escala con
+        // point_count — más locales = icono más grande, comunica magnitud
+        // incluso sin glyphs (OSM raster no tiene fonts).
         map.addLayer({
           id: "clusters",
-          type: "circle",
+          type: "symbol",
           source: "places",
           filter: ["has", "point_count"],
-          paint: {
-            "circle-color": "#1F1B17",
-            "circle-radius": [
+          layout: {
+            "icon-image": "burger-cluster",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-size": [
               "step",
               ["get", "point_count"],
-              18,
+              0.6,
               10,
-              22,
+              0.78,
               50,
-              28,
+              0.95,
             ],
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#F5EFE6",
           },
         });
 
-        // Cluster count: con OSM raster no hay glyphs disponibles, usamos un
-        // text-font genérico que MapLibre puede ignorar sin romper el render.
+        // Cluster count: solo con PMTILES (OSM raster sin glyphs). Texto
+        // se posiciona sobre la patty oscura del SVG con text-offset.
         if (USE_PMTILES) {
           map.addLayer({
             id: "cluster-count",
@@ -346,11 +368,22 @@ export function PlacesMap({ places, userCoords, className }: Props) {
             filter: ["has", "point_count"],
             layout: {
               "text-field": ["get", "point_count_abbreviated"],
-              "text-font": ["Noto Sans Regular"],
-              "text-size": 12,
+              "text-font": ["Noto Sans Bold", "Noto Sans Regular"],
+              "text-size": [
+                "step",
+                ["get", "point_count"],
+                10,
+                10,
+                12,
+                50,
+                14,
+              ],
+              "text-offset": [0, 0.15],
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
             },
             paint: {
-              "text-color": "#F5EFE6",
+              "text-color": "#FAF6EE",
             },
           });
         }
