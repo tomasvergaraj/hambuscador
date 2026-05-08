@@ -1,9 +1,25 @@
-import { IconArrowLeft, IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPencil, IconPhone, IconPhoto, IconRosetteDiscountCheckFilled, IconShare, IconTrash, IconHeart } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconBrandInstagram,
+  IconBrandWhatsapp,
+  IconCash,
+  IconClock,
+  IconFlame,
+  IconMapPin,
+  IconPencil,
+  IconPhone,
+  IconPhoto,
+  IconRosetteDiscountCheckFilled,
+  IconShare,
+  IconTrash,
+  IconHeart,
+  IconWorld,
+} from "@tabler/icons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ComponentType, SVGProps } from "react";
 
-import { Header } from "@/components/nav/header";
 import { Button } from "@/components/ui/button";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -211,20 +227,44 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
           )}
         </ul>
 
-        {/* Action buttons */}
-        <div className="flex gap-2 mt-5">
-          <Button variant="secondary" size="sm" fullWidth>
-            <IconMapPin size={14} aria-hidden="true" /> mapa
-          </Button>
+        {/* Action buttons — links accionables. Mobile abre app nativa cuando existe. */}
+        <div className="flex flex-wrap gap-2 mt-5">
+          <ActionLink
+            href={`https://www.google.com/maps/search/?api=1&query=${place.coords.lat},${place.coords.lng}`}
+            target="_blank"
+            icon={IconMapPin}
+            label="mapa"
+          />
           {place.phone && (
-            <Button variant="secondary" size="sm" fullWidth>
-              <IconPhone size={14} aria-hidden="true" /> llamar
-            </Button>
+            <ActionLink
+              href={`tel:${digitsOnly(place.phone)}`}
+              icon={IconPhone}
+              label="llamar"
+            />
+          )}
+          {place.whatsapp && (
+            <ActionLink
+              href={`https://wa.me/${digitsOnly(place.whatsapp)}`}
+              target="_blank"
+              icon={IconBrandWhatsapp}
+              label="whatsapp"
+            />
           )}
           {place.instagram && (
-            <Button variant="secondary" size="sm" fullWidth>
-              <IconBrandInstagram size={14} aria-hidden="true" /> ig
-            </Button>
+            <ActionLink
+              href={`https://instagram.com/${cleanIgHandle(place.instagram)}`}
+              target="_blank"
+              icon={IconBrandInstagram}
+              label="instagram"
+            />
+          )}
+          {place.website && (
+            <ActionLink
+              href={ensureUrlScheme(place.website)}
+              target="_blank"
+              icon={IconWorld}
+              label="sitio web"
+            />
           )}
         </div>
 
@@ -389,6 +429,27 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
 // Sub-componentes
 // ============================================================================
 
+type ActionLinkProps = {
+  href: string;
+  icon: ComponentType<SVGProps<SVGSVGElement> & { size?: number; stroke?: number }>;
+  label: string;
+  target?: "_blank";
+};
+
+function ActionLink({ href, icon: Icon, label, target }: ActionLinkProps) {
+  return (
+    <a
+      href={href}
+      target={target}
+      rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      className="flex-1 min-w-[40%] inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-crema-deep border border-crema-edge text-carbon font-medium text-xs hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-[0.97]"
+    >
+      <Icon size={14} aria-hidden="true" />
+      {label}
+    </a>
+  );
+}
+
 function PlaceHours({
   byDay,
   weekdays,
@@ -504,7 +565,9 @@ function buildRestaurantJsonLd(place: {
   coords: { lat: number; lng: number };
   photos: string[];
   phone?: string;
+  whatsapp?: string;
   instagram?: string;
+  website?: string;
 }): RestaurantJsonLd {
   const url = `${SITE_URL}/${place.comuna}/${place.slug}`;
 
@@ -532,7 +595,10 @@ function buildRestaurantJsonLd(place: {
 
   if (place.photos.length > 0) ld.image = place.photos;
   if (place.phone) ld.telephone = place.phone;
-  if (place.instagram) ld.sameAs = [`https://instagram.com/${place.instagram}`];
+  const sameAs: string[] = [];
+  if (place.instagram) sameAs.push(`https://instagram.com/${cleanIgHandle(place.instagram)}`);
+  if (place.website) sameAs.push(ensureUrlScheme(place.website));
+  if (sameAs.length > 0) ld.sameAs = sameAs;
 
   if (place.reviewCount > 0 && place.rating > 0) {
     ld.aggregateRating = {
@@ -567,6 +633,27 @@ function buildRestaurantJsonLd(place: {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** "+56 9 1234 5678" → "56912345678" — formato wa.me / tel: sin separadores. */
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+/** Limpia un handle de Instagram: saca @ inicial y URLs si pegaron. */
+function cleanIgHandle(s: string): string {
+  return s
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/\/+$/, "");
+}
+
+/** Asegura que la URL tenga `https://` para no romper como link relativo. */
+function ensureUrlScheme(s: string): string {
+  const trimmed = s.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
 
 function daysSince(iso: string): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
