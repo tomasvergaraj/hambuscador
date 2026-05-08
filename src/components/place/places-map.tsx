@@ -217,6 +217,9 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           }
         : {
             version: 8,
+            // glyphs URL → habilita symbol text layers (cluster-count) sobre
+            // tiles raster. Protomaps assets es CORS-abierto y free.
+            glyphs: PROTOMAPS_FONTS_URL,
             sources: {
               osm: {
                 type: "raster",
@@ -358,35 +361,38 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           },
         });
 
-        // Cluster count: solo con PMTILES (OSM raster sin glyphs). Texto
-        // se posiciona sobre la patty oscura del SVG con text-offset.
-        if (USE_PMTILES) {
-          map.addLayer({
-            id: "cluster-count",
-            type: "symbol",
-            source: "places",
-            filter: ["has", "point_count"],
-            layout: {
-              "text-field": ["get", "point_count_abbreviated"],
-              "text-font": ["Noto Sans Bold", "Noto Sans Regular"],
-              "text-size": [
-                "step",
-                ["get", "point_count"],
-                10,
-                10,
-                12,
-                50,
-                14,
-              ],
-              "text-offset": [0, 0.15],
-              "text-allow-overlap": true,
-              "text-ignore-placement": true,
-            },
-            paint: {
-              "text-color": "#FAF6EE",
-            },
-          });
-        }
+        // Cluster count: text overlay sobre la patty del SVG. Funciona en
+        // ambos modos porque el style OSM raster también declara glyphs.
+        // Halo carbon refuerza el contraste sobre la patty oscura (la patty
+        // ya es carbon, pero el halo hace el número más sólido a tamaños
+        // chicos donde el aliasing puede comerse el contorno).
+        map.addLayer({
+          id: "cluster-count",
+          type: "symbol",
+          source: "places",
+          filter: ["has", "point_count"],
+          layout: {
+            "text-field": ["get", "point_count_abbreviated"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": [
+              "step",
+              ["get", "point_count"],
+              11,
+              10,
+              13,
+              50,
+              15,
+            ],
+            "text-offset": [0, 0.15],
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": "#FAF6EE",
+            "text-halo-color": "#1F1B17",
+            "text-halo-width": 1.2,
+          },
+        });
 
         map.addLayer({
           id: "pins-default",
