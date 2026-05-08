@@ -108,3 +108,12 @@
     transform: translateY(0);
   }
 }
+
+/* Oculta el scrollbar en carouseles horizontales (mobile-first scroll-snap) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

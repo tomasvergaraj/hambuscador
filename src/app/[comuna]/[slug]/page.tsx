@@ -8,7 +8,6 @@ import {
   IconMapPin,
   IconPencil,
   IconPhone,
-  IconPhoto,
   IconRosetteDiscountCheckFilled,
   IconShare,
   IconSparkles,
@@ -21,6 +20,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
 
+import { PhotoCarousel } from "@/components/place/photo-carousel";
 import { Button } from "@/components/ui/button";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -101,9 +101,12 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* Hero image (placeholder hasta Fase 2) */}
-      <div className="relative h-52 bg-mostaza-deep flex items-center justify-center">
-        <IconPhoto size={42} className="text-crema-deep/50" aria-hidden="true" />
+      {/* Hero — carousel de fotos del local con scroll-snap. Si no hay fotos
+          cae a placeholder de la marca. Overlay nav (back/admin/share/heart)
+          va sobre el carousel con z-index implícito (el carousel es absolute
+          inset-0 dentro del contenedor relativo). */}
+      <div className="relative h-52 bg-mostaza-deep">
+        <PhotoCarousel photos={place.photos} placeName={place.name} />
 
         {/* Overlay nav */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
@@ -148,13 +151,6 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               </button>
             </form>
           </div>
-        </div>
-
-        {/* Photo dots indicator */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-crema-deep" />
-          <span className="w-1.5 h-1.5 rounded-full bg-crema-deep/50" />
-          <span className="w-1.5 h-1.5 rounded-full bg-crema-deep/50" />
         </div>
       </div>
 
