@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { IconAlertCircle, IconCheck } from "@tabler/icons-react";
 
 import {
   DaysSchedule,
@@ -16,9 +17,12 @@ import { PinPickerMap } from "@/components/place/pin-picker-map";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import type { Place } from "@/types/place";
 
 import { updatePlaceAction, type UpdatePlaceState } from "./actions";
+
+type Toast = { kind: "ok" | "error"; msg: string };
 
 const initial: UpdatePlaceState = {};
 
@@ -47,6 +51,30 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
   const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
 
+  // Toast — re-trigger por cada nuevo state que devuelve el action
+  // (useActionState produce nuevo objeto en cada submit, así el effect dispara
+  // aunque dos saves consecutivos den ok). El key fuerza remount → animación
+  // de entrada se replay.
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [toastKey, setToastKey] = useState(0);
+
+  useEffect(() => {
+    if (state?.ok) {
+      setToast({ kind: "ok", msg: "cambios guardados" });
+      setToastKey((k) => k + 1);
+    } else if (state?.error) {
+      setToast({ kind: "error", msg: state.error });
+      setToastKey((k) => k + 1);
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const ms = toast.kind === "ok" ? 2500 : 5000;
+    const id = window.setTimeout(() => setToast(null), ms);
+    return () => window.clearTimeout(id);
+  }, [toast, toastKey]);
+
   const hoursByDayJson = JSON.stringify(serializeSchedule(schedule));
   const hoursWeekdays = summarizeWeekdays(schedule);
   const hoursWeekends = summarizeWeekends(schedule);
@@ -59,17 +87,6 @@ export function EditPlaceForm({ place }: { place: Place }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      {state?.ok && (
-        <div className="rounded-lg bg-lechuga/15 border border-lechuga/30 px-3 py-2 text-sm text-lechuga font-medium">
-          cambios guardados
-        </div>
-      )}
-      {state?.error && (
-        <div className="rounded-lg bg-tomate/15 border border-tomate/30 px-3 py-2 text-sm text-tomate font-medium">
-          {state.error}
-        </div>
-      )}
-
       {/* Bloque: identidad */}
       <Section title="identidad">
         <Field label="nombre">
@@ -289,6 +306,37 @@ export function EditPlaceForm({ place }: { place: Place }) {
           {pending ? "guardando..." : "guardar cambios"}
         </Button>
       </div>
+
+      {toast ? (
+        <div
+          key={toastKey}
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "fixed bottom-20 left-4 right-4 sm:left-auto sm:right-6 sm:w-80 z-50",
+            "flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border font-medium text-sm",
+            "animate-[slideUp_0.25s_ease-out]",
+            toast.kind === "ok"
+              ? "bg-lechuga text-crema-deep border-lechuga-deep"
+              : "bg-tomate text-crema-deep border-tomate-deep",
+          )}
+        >
+          {toast.kind === "ok" ? (
+            <IconCheck size={18} aria-hidden="true" />
+          ) : (
+            <IconAlertCircle size={18} aria-hidden="true" />
+          )}
+          <span className="flex-1">{toast.msg}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            aria-label="cerrar aviso"
+            className="text-crema-deep/80 hover:text-crema-deep transition-colors text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }
