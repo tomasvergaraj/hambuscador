@@ -25,10 +25,18 @@ export function UsernameSetter({
     initial,
   );
   const [draft, setDraft] = React.useState(currentUsername ?? "");
+  const [editing, setEditing] = React.useState(currentUsername === null);
 
+  // Después de un update exitoso, el username "actual" pasa a ser el draft;
+  // colapsamos el form. revalidatePath en el action ya refresca currentUsername
+  // en el próximo render server, pero hasta entonces usamos el draft local.
   const username = state.ok ? draft.trim().toLowerCase() : currentUsername;
 
-  if (username) {
+  React.useEffect(() => {
+    if (state.ok) setEditing(false);
+  }, [state.ok]);
+
+  if (username && !editing) {
     return (
       <section className="bg-crema-deep border border-crema-edge rounded-xl p-3 flex items-center gap-3">
         <span className="w-8 h-8 rounded-lg bg-mostaza/15 inline-flex items-center justify-center text-mostaza shrink-0">
@@ -44,92 +52,72 @@ export function UsernameSetter({
             <IconExternalLink size={12} aria-hidden="true" />
           </Link>
         </div>
-        <details className="text-[11px] text-tinta-suave">
-          <summary className="cursor-pointer hover:text-carbon transition-colors">
-            cambiar
-          </summary>
-          <UsernameForm
-            initial={username}
-            formAction={formAction}
-            pending={pending}
-            error={state.error}
-            draft={draft}
-            setDraft={setDraft}
-          />
-        </details>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-[11px] text-tinta-suave hover:text-carbon transition-colors shrink-0 px-2 py-1 rounded hover:bg-white/60"
+        >
+          cambiar
+        </button>
       </section>
     );
   }
 
+  // Modo edit/elegir: layout column.
   return (
-    <section className="bg-crema-deep border border-crema-edge rounded-xl p-4">
-      <p className="font-display font-semibold text-sm text-carbon">
-        elige tu nombre público
-      </p>
-      <p className="text-[11px] text-tinta-suave mt-0.5 leading-relaxed">
-        habilita <span className="font-mono">hambuscador.cl/u/tu-nombre</span>{" "}
-        para compartir tus reseñas y favoritos.
-      </p>
-      <div className="mt-3">
-        <UsernameForm
-          formAction={formAction}
-          pending={pending}
-          error={state.error}
-          draft={draft}
-          setDraft={setDraft}
-        />
+    <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex flex-col gap-2">
+      <div>
+        <p className="font-display font-semibold text-sm text-carbon">
+          {username ? "cambiar tu nombre público" : "elige tu nombre público"}
+        </p>
+        <p className="text-[11px] text-tinta-suave mt-0.5 leading-relaxed">
+          habilita <span className="font-mono">hambuscador.cl/u/tu-nombre</span>{" "}
+          para compartir tus reseñas y favoritos.
+        </p>
       </div>
-    </section>
-  );
-}
 
-function UsernameForm({
-  initial,
-  formAction,
-  pending,
-  error,
-  draft,
-  setDraft,
-}: {
-  initial?: string;
-  formAction: (fd: FormData) => void;
-  pending: boolean;
-  error?: string;
-  draft: string;
-  setDraft: (v: string) => void;
-}) {
-  return (
-    <form action={formAction} className="flex flex-col gap-2 mt-2">
-      <div className="flex gap-2">
-        <span className="inline-flex items-center px-2 text-bronceado font-mono text-sm">
-          @
-        </span>
-        <input
-          name="username"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.toLowerCase())}
-          placeholder={initial ?? "tu-nombre"}
-          minLength={3}
-          maxLength={30}
-          pattern="[a-z0-9_-]+"
-          className="flex-1 bg-white border border-crema-edge rounded-md px-3 py-2 text-sm text-carbon placeholder:text-bronceado outline-none focus:border-bronceado font-mono"
-        />
-        <Button type="submit" variant="primary" size="md" disabled={pending}>
-          {pending ? "..." : initial ? "cambiar" : "elegir"}
-        </Button>
-      </div>
-      {error ? (
-        <p
-          role="alert"
-          className="text-[11px] text-tomate font-medium"
-        >
-          {error}
-        </p>
-      ) : (
-        <p className="text-[10px] text-bronceado">
-          minúsculas, números, _ y - · 3 a 30 caracteres
-        </p>
-      )}
-    </form>
+      <form action={formAction} className="flex flex-col gap-2 mt-1">
+        <div className="flex gap-2">
+          <span className="inline-flex items-center px-2 text-bronceado font-mono text-sm bg-white border border-crema-edge rounded-md">
+            @
+          </span>
+          <input
+            name="username"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.toLowerCase())}
+            placeholder={username ?? "tu-nombre"}
+            minLength={3}
+            maxLength={30}
+            pattern="[a-z0-9_-]+"
+            autoFocus
+            className="flex-1 min-w-0 bg-white border border-crema-edge rounded-md px-3 py-2 text-sm text-carbon placeholder:text-bronceado outline-none focus:border-bronceado font-mono"
+          />
+          <Button type="submit" variant="primary" size="md" disabled={pending}>
+            {pending ? "..." : username ? "guardar" : "elegir"}
+          </Button>
+        </div>
+        {state.error ? (
+          <p role="alert" className="text-[11px] text-tomate font-medium">
+            {state.error}
+          </p>
+        ) : (
+          <p className="text-[10px] text-bronceado">
+            minúsculas, números, _ y - · 3 a 30 caracteres
+          </p>
+        )}
+        {username && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(username);
+              setEditing(false);
+            }}
+            className="text-[11px] text-tinta-suave hover:text-carbon transition-colors self-start"
+          >
+            cancelar
+          </button>
+        )}
+      </form>
+    </section>
   );
 }
