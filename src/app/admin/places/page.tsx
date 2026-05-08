@@ -1,4 +1,5 @@
-import { IconEdit, IconExternalLink } from "@tabler/icons-react";
+import { IconEdit, IconExternalLink, IconPhoto } from "@tabler/icons-react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { SearchBar } from "@/components/ui/search-bar";
@@ -77,11 +78,34 @@ export default async function AdminPlacesPage({
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {places.map((place) => (
+          {places.map((place) => {
+            // Thumb: logo > primera foto > placeholder. object-contain con
+            // padding para logos (no recortar wordmark); cover para fotos.
+            const thumb = place.logo ?? place.photos[0];
+            const isLogo = Boolean(place.logo);
+            return (
             <li
               key={place.id}
               className="bg-white border border-crema-edge rounded-xl p-3 flex items-center gap-3"
             >
+              <div className="relative w-10 h-10 shrink-0 rounded-md overflow-hidden bg-mostaza-deep flex items-center justify-center border border-crema-edge">
+                {thumb ? (
+                  <Image
+                    src={thumb}
+                    alt={place.name}
+                    fill
+                    sizes="40px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <IconPhoto
+                    size={16}
+                    stroke={1.5}
+                    className="text-crema-deep opacity-60"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-display font-semibold text-sm text-carbon truncate">
@@ -97,6 +121,16 @@ export default async function AdminPlacesPage({
                   {place.isVerified && (
                     <span className="text-[10px] uppercase tracking-wider font-medium bg-lechuga/20 text-lechuga px-1.5 py-0.5 rounded">
                       verificado
+                    </span>
+                  )}
+                  {place.isFeatured && (
+                    <span className="text-[10px] uppercase tracking-wider font-medium bg-tomate/15 text-tomate px-1.5 py-0.5 rounded">
+                      destacado
+                    </span>
+                  )}
+                  {isLogo && (
+                    <span className="text-[10px] uppercase tracking-wider font-medium bg-mostaza/20 text-mostaza-deep px-1.5 py-0.5 rounded">
+                      logo
                     </span>
                   )}
                 </div>
@@ -123,7 +157,8 @@ export default async function AdminPlacesPage({
                 editar
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </main>

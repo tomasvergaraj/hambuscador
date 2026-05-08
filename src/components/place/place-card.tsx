@@ -120,7 +120,7 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
             src={compactThumb}
             alt={place.name}
             fill
-            className={place.logo ? "object-contain p-1" : "object-cover"}
+            className="object-cover"
             sizes="78px"
           />
         ) : (
