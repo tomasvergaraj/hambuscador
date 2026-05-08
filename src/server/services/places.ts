@@ -468,6 +468,8 @@ export async function updatePlace(
     photos?: string[];
     isVerified?: boolean;
     isFeatured?: boolean;
+    /** Set to null para revocar owner de un local. */
+    claimedBy?: string | null;
   },
 ): Promise<void> {
   if (!isDbConfigured()) {
@@ -497,6 +499,7 @@ export async function updatePlace(
   if (patch.photos !== undefined) updates.photos = patch.photos;
   if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
   if (patch.isFeatured !== undefined) updates.isFeatured = patch.isFeatured;
+  if (patch.claimedBy !== undefined) updates.claimedBy = patch.claimedBy;
 
   await db.update(places).set(updates).where(eq(places.id, placeId));
 }

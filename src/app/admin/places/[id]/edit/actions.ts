@@ -143,3 +143,27 @@ export async function updatePlaceAction(
 
   return { ok: true };
 }
+
+/**
+ * Revoca al owner del local — claim aprobado por error o cambio de
+ * dueño. Setea places.claimed_by = NULL. NO toca isVerified (puede
+ * estar verified por motivos independientes; admin lo togglea aparte).
+ *
+ * Bind: .bind(null, placeId).
+ */
+export async function revokeOwnerAction(placeId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+  const session = await auth();
+  if (!session?.user?.id) redirect("/iniciar-sesion");
+  if (session.user.role !== "admin") redirect("/");
+
+  const existing = await getPlaceByIdForAdmin(placeId);
+  if (!existing) return;
+
+  await updatePlace(placeId, { claimedBy: null });
+
+  revalidateTag("places");
+  revalidatePath(`/${existing.comuna}/${existing.slug}`);
+  revalidatePath("/admin/places");
+  revalidatePath(`/admin/places/${placeId}/edit`);
+}

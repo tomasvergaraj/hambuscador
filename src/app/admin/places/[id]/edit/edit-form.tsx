@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useEffect, useState } from "react";
-import { IconAlertCircle, IconCheck } from "@tabler/icons-react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { IconAlertCircle, IconCheck, IconUserX } from "@tabler/icons-react";
 
 import {
   DaysSchedule,
@@ -20,7 +20,7 @@ import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { Place } from "@/types/place";
 
-import { updatePlaceAction, type UpdatePlaceState } from "./actions";
+import { revokeOwnerAction, updatePlaceAction, type UpdatePlaceState } from "./actions";
 
 type Toast = { kind: "ok" | "error"; msg: string };
 
@@ -51,6 +51,8 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const [logo, setLogo] = useState<string[]>(place.logo ? [place.logo] : []);
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
   const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
+  const [isClaimed, setIsClaimed] = useState<boolean>(place.isClaimed);
+  const [revokePending, startRevokeTransition] = useTransition();
 
   // Toast — re-trigger por cada nuevo state que devuelve el action
   // (useActionState produce nuevo objeto en cada submit, así el effect dispara
@@ -79,6 +81,22 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const hoursByDayJson = JSON.stringify(serializeSchedule(schedule));
   const hoursWeekdays = summarizeWeekdays(schedule);
   const hoursWeekends = summarizeWeekends(schedule);
+
+  function handleRevokeOwner() {
+    if (
+      !window.confirm(
+        "¿Revocar al owner de este local? Va a perder acceso a editar la ficha. Esta acción no afecta historial de claims.",
+      )
+    ) {
+      return;
+    }
+    startRevokeTransition(async () => {
+      await revokeOwnerAction(place.id);
+      setIsClaimed(false);
+      setToast({ kind: "ok", msg: "owner revocado" });
+      setToastKey((k) => k + 1);
+    });
+  }
 
   function toggleCuisine(id: string) {
     setCuisines((prev) =>
@@ -313,6 +331,32 @@ export function EditPlaceForm({ place }: { place: Place }) {
           con publicidad activa.
         </p>
       </Section>
+
+      {/* Owner — solo aparece si el local está claimed. Botón con confirm
+          revoca claimed_by (no toca isVerified). El historial de
+          place_claims queda intacto para auditoría. */}
+      {isClaimed && (
+        <Section title="owner">
+          <p className="text-xs text-carbon">
+            Este local está reclamado por un usuario verificado. Puede editar
+            la ficha vía <code>/mi-local/&lt;id&gt;/editar</code>.
+          </p>
+          <button
+            type="button"
+            onClick={handleRevokeOwner}
+            disabled={revokePending}
+            className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-tomate bg-tomate/10 border border-tomate/30 hover:bg-tomate/15 px-3 py-2 rounded-md transition-colors disabled:opacity-60"
+          >
+            <IconUserX size={14} aria-hidden="true" />
+            {revokePending ? "revocando..." : "revocar owner"}
+          </button>
+          <p className="text-[11px] text-bronceado">
+            el user pierde acceso a editar pero la fila en place_claims queda
+            como historial. el badge «verificado» NO se toca — togglealo
+            arriba si corresponde.
+          </p>
+        </Section>
+      )}
 
       <div className="sticky bottom-0 -mx-4 px-4 py-3 bg-crema border-t border-crema-edge flex gap-2 justify-end">
         <Button type="submit" variant="primary" size="md" disabled={pending}>
