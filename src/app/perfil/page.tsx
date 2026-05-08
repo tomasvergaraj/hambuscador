@@ -2,6 +2,7 @@ import {
   IconBuildingStore,
   IconChevronRight,
   IconHeart,
+  IconLayoutDashboard,
   IconLogout,
   IconStar,
 } from "@tabler/icons-react";
@@ -13,6 +14,7 @@ import { Header } from "@/components/nav/header";
 import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
+import { countPendingPlaces } from "@/server/services/places";
 import {
   getMyFavorites,
   getMyReviews,
@@ -64,9 +66,11 @@ export default async function PerfilPage({
   const { nuevo, tab: tabParam } = await searchParams;
   const tab = parseTab(tabParam);
   const userId = session.user.id;
+  const isAdmin = session.user.role === "admin";
 
-  // Pedimos stats + user (para username) + la lista de la tab activa
-  const [stats, dbUser, list] = await Promise.all([
+  // Pedimos stats + user (para username) + la lista de la tab activa.
+  // Si es admin sumamos count de pendientes para el badge del shortcut.
+  const [stats, dbUser, list, pendingCount] = await Promise.all([
     getUserStats(userId),
     getUserById(userId),
     tab === "resenas"
@@ -74,6 +78,7 @@ export default async function PerfilPage({
       : tab === "favoritos"
         ? getMyFavorites(userId)
         : getMySubmissions(userId),
+    isAdmin ? countPendingPlaces() : Promise.resolve(0),
   ]);
 
   const showSubmittedBanner = nuevo === "1";
@@ -115,6 +120,39 @@ export default async function PerfilPage({
         </section>
 
         <UsernameSetter currentUsername={dbUser?.username ?? null} />
+
+        {/* Acceso rápido al modo admin — solo para usuarios con role=admin.
+            Carbon background + mostaza accent para que destaque del resto
+            del perfil. Badge con count de pendientes cuando hay. */}
+        {isAdmin && (
+          <Link
+            href="/admin/moderacion"
+            className="flex items-center gap-3 bg-carbon text-crema rounded-xl p-4 hover:bg-carbon-soft transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98] hover:shadow-md"
+          >
+            <div className="w-10 h-10 rounded-md bg-mostaza text-carbon flex items-center justify-center shrink-0">
+              <IconLayoutDashboard size={20} aria-hidden="true" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-sm">panel admin</p>
+              <p className="text-[11px] text-crema/70">
+                moderar pendientes y administrar locales
+              </p>
+            </div>
+            {pendingCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-[11px] font-medium bg-mostaza text-carbon rounded-full shrink-0"
+                aria-label={`${pendingCount} pendientes`}
+              >
+                {pendingCount}
+              </span>
+            )}
+            <IconChevronRight
+              size={18}
+              className="text-crema/60 shrink-0"
+              aria-hidden="true"
+            />
+          </Link>
+        )}
 
         {/* Stats */}
         <section aria-label="actividad">
