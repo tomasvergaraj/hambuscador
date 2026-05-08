@@ -83,6 +83,31 @@ export type ComunaSlug = (typeof COMUNAS_REGISTRY)[number]["slug"];
 export const SEED_COMUNAS = COMUNAS_REGISTRY.map((c) => c.slug);
 
 /**
+ * Registry de regiones donde tenemos presencia. Centroide aproximado +
+ * zoom sugerido para flyTo desde el buscador del mapa. Se mantiene
+ * hardcoded mientras el catálogo sea pequeño; cuando crezca lo derivamos
+ * de COMUNAS_REGISTRY agregando los centroides.
+ */
+export const REGIONS_REGISTRY = [
+  {
+    slug: "metropolitana",
+    label: "Región Metropolitana",
+    lat: -33.45,
+    lng: -70.65,
+    zoom: 9,
+  },
+  {
+    slug: "valparaiso",
+    label: "Región de Valparaíso",
+    lat: -33.0,
+    lng: -71.5,
+    zoom: 9,
+  },
+] as const;
+
+export type RegionSlug = (typeof REGIONS_REGISTRY)[number]["slug"];
+
+/**
  * Días de la semana para el horario por día (storage en `places.hours_by_day`).
  * Orden importa: arranca en lunes, termina en domingo (estilo es-CL).
  */
