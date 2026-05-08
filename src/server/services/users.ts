@@ -358,6 +358,10 @@ export async function banUser(userId: string): Promise<void> {
     .update(users)
     .set({ bannedAt: new Date(), updatedAt: new Date() })
     .where(eq(users.id, userId));
+  // Recompute agregados de los places donde este user dejó reseñas — sus
+  // reseñas se vuelven invisibles, el rating mostrado debe reflejarlo.
+  const { recomputePlacesForUser } = await import("./places");
+  await recomputePlacesForUser(userId);
 }
 
 export async function unbanUser(userId: string): Promise<void> {
@@ -367,6 +371,9 @@ export async function unbanUser(userId: string): Promise<void> {
     .update(users)
     .set({ bannedAt: null, updatedAt: new Date() })
     .where(eq(users.id, userId));
+  // Las reseñas vuelven a ser visibles → recalcular rating con ellas adentro.
+  const { recomputePlacesForUser } = await import("./places");
+  await recomputePlacesForUser(userId);
 }
 
 export async function setUserRole(userId: string, role: UserRole): Promise<void> {

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
 import { places, reviews, users, type DbReview } from "@/server/db/schema";
@@ -63,6 +63,10 @@ export async function getReviewsByPlaceId(
   const { limit = 20 } = opts ?? {};
   const db = getDb();
 
+  // INNER JOIN + filter banned: si el autor está baneado, su reseña queda
+  // oculta del listado público (ban retroactivo en lectura). El agregado
+  // `places.rating_avg` se mantiene consistente porque `banUser` dispara
+  // `recomputePlacesForUser` que excluye baneados.
   const rows = await db
     .select({
       id: reviews.id,
@@ -80,8 +84,8 @@ export async function getReviewsByPlaceId(
       authorImage: users.image,
     })
     .from(reviews)
-    .leftJoin(users, eq(reviews.authorId, users.id))
-    .where(eq(reviews.placeId, placeId))
+    .innerJoin(users, eq(reviews.authorId, users.id))
+    .where(and(eq(reviews.placeId, placeId), isNull(users.bannedAt)))
     .orderBy(desc(reviews.createdAt))
     .limit(limit);
 

@@ -1,4 +1,5 @@
 import {
+  IconAlertTriangle,
   IconCheck,
   IconClock,
   IconMapPin,
@@ -9,6 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import { getPendingPlaces } from "@/server/services/places";
 import type { Place } from "@/types/place";
 
@@ -42,9 +44,12 @@ export default async function ModeracionPage() {
         <EmptyState />
       ) : (
         <ul className="flex flex-col gap-3">
-          {pending.map((place) => (
-            <li key={place.id}>
-              <PendingPlaceCard place={place} />
+          {pending.map((item) => (
+            <li key={item.place.id}>
+              <PendingPlaceCard
+                place={item.place}
+                submitterBanned={item.submitterBanned}
+              />
             </li>
           ))}
         </ul>
@@ -53,9 +58,29 @@ export default async function ModeracionPage() {
   );
 }
 
-function PendingPlaceCard({ place }: { place: Place }) {
+function PendingPlaceCard({
+  place,
+  submitterBanned,
+}: {
+  place: Place;
+  submitterBanned: boolean;
+}) {
   return (
-    <article className="bg-white border border-crema-edge rounded-xl p-4">
+    <article
+      className={cn(
+        "bg-white border rounded-xl p-4",
+        submitterBanned ? "border-tomate/40" : "border-crema-edge",
+      )}
+    >
+      {submitterBanned && (
+        <div className="mb-3 flex items-center gap-2 text-[11px] text-tomate bg-tomate/10 border border-tomate/30 rounded-md px-2.5 py-1.5">
+          <IconAlertTriangle size={14} aria-hidden="true" />
+          <span>
+            <span className="font-semibold">creador baneado.</span> revisa con
+            cuidado — probable spam.
+          </span>
+        </div>
+      )}
       <header className="flex items-start justify-between gap-2">
         <div>
           <h2 className="font-display font-semibold text-base text-carbon">{place.name}</h2>

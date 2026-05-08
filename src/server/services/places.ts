@@ -655,19 +655,36 @@ export async function countPendingPlaces(): Promise<number> {
   return first?.count ?? 0;
 }
 
-export async function getPendingPlaces(opts?: { limit?: number }): Promise<Place[]> {
+export type PendingPlaceItem = {
+  place: Place;
+  /** True si el submitter está baneado al momento de la query — el admin
+   * lo revisa con extra cuidado antes de aprobar (probable spam). */
+  submitterBanned: boolean;
+};
+
+export async function getPendingPlaces(opts?: {
+  limit?: number;
+}): Promise<PendingPlaceItem[]> {
   if (!isDbConfigured()) return [];
 
   const { limit = 50 } = opts ?? {};
   const db = getDb();
+  const { users } = await import("@/server/db/schema");
   const rows = await db
-    .select()
+    .select({
+      place: places,
+      submitterBannedAt: users.bannedAt,
+    })
     .from(places)
+    .leftJoin(users, eq(users.id, places.submittedBy))
     .where(eq(places.moderationStatus, "pending"))
-    .orderBy(sql`created_at ASC`)
+    .orderBy(sql`${places.createdAt} ASC`)
     .limit(limit);
 
-  return rows.map((row) => dbPlaceToUi(row));
+  return rows.map((row) => ({
+    place: dbPlaceToUi(row.place),
+    submitterBanned: Boolean(row.submitterBannedAt),
+  }));
 }
 
 /**
@@ -711,24 +728,55 @@ export async function rejectPlace(placeId: string): Promise<void> {
 
 /**
  * Recalcula los agregados denormalizados (rating_avg, review_count) para un
- * local. Llamar después de crear/borrar una reseña.
+ * local. Llamar después de crear/borrar una reseña O después de banear/
+ * unbanear un usuario que dejó reseñas.
+ *
+ * EXCLUYE reseñas de usuarios baneados — el ban es retroactivo en lecturas
+ * públicas, así el rating reflejado coincide con las reseñas que el usuario
+ * ve listadas (sin las del baneado).
  */
 export async function recomputePlaceAggregates(placeId: string): Promise<void> {
   if (!isDbConfigured()) return;
 
   const db = getDb();
   await db.execute(sql`
-    UPDATE places
+    UPDATE places p
     SET
       rating_avg = COALESCE((
-        SELECT AVG(rating)::numeric(3,2) FROM reviews WHERE place_id = ${placeId}
+        SELECT AVG(r.rating)::numeric(3,2)
+        FROM reviews r
+        JOIN users u ON u.id = r.author_id
+        WHERE r.place_id = ${placeId} AND u.banned_at IS NULL
       ), NULL),
       review_count = (
-        SELECT COUNT(*)::int FROM reviews WHERE place_id = ${placeId}
+        SELECT COUNT(*)::int
+        FROM reviews r
+        JOIN users u ON u.id = r.author_id
+        WHERE r.place_id = ${placeId} AND u.banned_at IS NULL
       ),
       updated_at = NOW()
-    WHERE id = ${placeId}
+    WHERE p.id = ${placeId}
   `);
+}
+
+/**
+ * Recompute agregados de TODOS los places donde un usuario dejó reseñas.
+ * Usado al banear/unbanear, para que el rating público quede consistente
+ * con las reseñas visibles después del cambio de estado del usuario.
+ */
+export async function recomputePlacesForUser(userId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+
+  const db = getDb();
+  // 1 query por place (en serie). Si llegamos a usuarios prolíficos con
+  // muchos places, mover a un solo UPDATE con CTE.
+  const rows = await db.execute<{ place_id: string }>(sql`
+    SELECT DISTINCT place_id FROM reviews WHERE author_id = ${userId}
+  `);
+
+  for (const row of rows.rows) {
+    await recomputePlaceAggregates(row.place_id);
+  }
 }
 
 // ----------------------------------------------------------------------------
