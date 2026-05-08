@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/auth";
+import { countPendingClaims } from "@/server/services/claims";
 import { countPendingPlaces } from "@/server/services/places";
 
 /**
@@ -18,8 +19,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/");
   }
 
-  // Count para el badge del tab pendientes. No-op en modo demo (sin DB).
-  const pendingCount = await countPendingPlaces();
+  // Counts paralelos para badges de los tabs. No-op en modo demo (sin DB).
+  const [pendingCount, claimsCount] = await Promise.all([
+    countPendingPlaces(),
+    countPendingClaims(),
+  ]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -56,6 +60,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
         >
           locales
+        </Link>
+        <Link
+          href="/admin/claims"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza inline-flex items-center gap-1.5"
+        >
+          claims
+          {claimsCount > 0 && (
+            <span
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-tomate text-crema-deep text-[10px] font-bold"
+              aria-label={`${claimsCount} ${claimsCount === 1 ? "claim" : "claims"}`}
+            >
+              {claimsCount}
+            </span>
+          )}
         </Link>
         <Link
           href="/admin/resenas"
