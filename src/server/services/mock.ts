@@ -27,8 +27,11 @@ export const MOCK_PLACES: Place[] = [
     distanceM: 450,
     photos: [],
     phone: "+56 2 2345 6789",
+    whatsapp: "+56 9 1234 5678",
     instagram: "streatburger",
+    website: "https://streatburger.cl",
     isVerified: true,
+    isFeatured: true,
     isClaimed: true,
   },
   {
@@ -51,6 +54,7 @@ export const MOCK_PLACES: Place[] = [
     photos: [],
     instagram: "holymolyburger",
     isVerified: false,
+    isFeatured: false,
     isClaimed: false,
   },
   {
@@ -72,6 +76,7 @@ export const MOCK_PLACES: Place[] = [
     distanceM: 820,
     photos: [],
     isVerified: true,
+    isFeatured: false,
     isClaimed: false,
   },
   {
@@ -94,6 +99,7 @@ export const MOCK_PLACES: Place[] = [
     photos: [],
     phone: "+56 2 2345 6790",
     isVerified: true,
+    isFeatured: false,
     isClaimed: true,
   },
 ];

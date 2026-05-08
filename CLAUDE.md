@@ -444,6 +444,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-08-regions.sql` — tabla `regions(slug PK, label UNIQUE, lat, lng, zoom)` seedeada con las 16 regiones oficiales de Chile. ⏳ Pendiente aplicar en Neon prod.
 - `drizzle/2026-05-08-comunas.sql` — tabla `comunas(slug PK, label, region_slug FK, region_label, lat, lng)` seedeada con las 346 comunas oficiales (origen 2x3-la/geo-chile + reasignación Ñuble + Alhué + correcciones). ⏳ Pendiente aplicar en Neon prod (después de regions, hay FK).
 - `drizzle/2026-05-08-resync-aggregates.sql` — UPDATE one-shot que recalcula `places.rating_avg` y `review_count` excluyendo reseñas de baneados. Idempotente. ⏳ Pendiente aplicar en Neon prod (una vez después del deploy del ban retroactivo).
+- `drizzle/2026-05-08-place-contact-featured.sql` — `places.whatsapp` text + `places.is_featured` boolean default false. Cabe el contacto WhatsApp y el flag de publicidad (pin diferenciado en mapa). Idempotente. ⏳ Pendiente aplicar en Neon prod.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 

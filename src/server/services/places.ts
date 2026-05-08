@@ -43,8 +43,11 @@ function dbPlaceToUi(row: DbPlace, distanceM?: number): Place {
     distanceM,
     photos: row.photos,
     phone: row.phone ?? undefined,
+    whatsapp: row.whatsapp ?? undefined,
     instagram: row.instagram ?? undefined,
+    website: row.website ?? undefined,
     isVerified: row.isVerified,
+    isFeatured: row.isFeatured,
     isClaimed: !!row.claimedBy,
   };
 }
@@ -451,9 +454,12 @@ export async function updatePlace(
     hoursWeekends?: string | null;
     hoursByDay?: Record<string, string | null> | null;
     phone?: string | null;
+    whatsapp?: string | null;
     instagram?: string | null;
+    website?: string | null;
     photos?: string[];
     isVerified?: boolean;
+    isFeatured?: boolean;
   },
 ): Promise<void> {
   if (!isDbConfigured()) {
@@ -476,9 +482,12 @@ export async function updatePlace(
   if (patch.hoursWeekends !== undefined) updates.hoursWeekends = patch.hoursWeekends;
   if (patch.hoursByDay !== undefined) updates.hoursByDay = patch.hoursByDay;
   if (patch.phone !== undefined) updates.phone = patch.phone;
+  if (patch.whatsapp !== undefined) updates.whatsapp = patch.whatsapp;
   if (patch.instagram !== undefined) updates.instagram = patch.instagram;
+  if (patch.website !== undefined) updates.website = patch.website;
   if (patch.photos !== undefined) updates.photos = patch.photos;
   if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
+  if (patch.isFeatured !== undefined) updates.isFeatured = patch.isFeatured;
 
   await db.update(places).set(updates).where(eq(places.id, placeId));
 }
@@ -527,7 +536,9 @@ export async function createPlace(input: {
   hoursWeekends?: string;
   hoursByDay?: Record<string, string | null>;
   phone?: string;
+  whatsapp?: string;
   instagram?: string;
+  website?: string;
   photos?: string[];
   submittedBy: string;
 }): Promise<DbPlace> {
@@ -554,7 +565,9 @@ export async function createPlace(input: {
     hoursWeekends: input.hoursWeekends ?? null,
     hoursByDay: input.hoursByDay ?? null,
     phone: input.phone ?? null,
+    whatsapp: input.whatsapp ?? null,
     instagram: input.instagram ?? null,
+    website: input.website ?? null,
     photos: input.photos ?? [],
     submittedBy: input.submittedBy,
     moderationStatus: "pending",

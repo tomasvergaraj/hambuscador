@@ -145,6 +145,7 @@ export const places = pgTable(
      */
     hoursByDay: jsonb("hours_by_day").$type<Record<string, string | null>>(),
     phone: text("phone"),
+    whatsapp: text("whatsapp"),
     instagram: text("instagram"),
     website: text("website"),
     photos: text("photos").array().notNull().default(sql`'{}'::text[]`),
@@ -156,6 +157,11 @@ export const places = pgTable(
     submittedBy: uuid("submitted_by").references(() => users.id, { onDelete: "set null" }),
     claimedBy: uuid("claimed_by").references(() => users.id, { onDelete: "set null" }),
     isVerified: boolean("is_verified").notNull().default(false),
+    /**
+     * Local destacado por publicidad. Se renderiza con pin diferenciado en el
+     * mapa y (futuro) prioridad sutil en listados. Solo togglable por admin.
+     */
+    isFeatured: boolean("is_featured").notNull().default(false),
 
     // Agregados denormalizados (se actualizan al insertar/borrar review)
     ratingAvg: numeric("rating_avg", { precision: 3, scale: 2 }),

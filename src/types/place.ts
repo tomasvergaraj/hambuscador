@@ -32,8 +32,12 @@ export type Place = {
   distanceM?: number; // distance del usuario, calculada en runtime
   photos: string[]; // URLs absolutas (TODO Fase 2: integrar storage)
   phone?: string;
+  whatsapp?: string;
   instagram?: string;
+  website?: string;
   isVerified: boolean;
+  /** Local destacado por publicidad — pin diferenciado en mapa. Solo admin lo togglea. */
+  isFeatured: boolean;
   isClaimed: boolean; // dueño reclamó la ficha
   ratingsByAspect?: Record<ReviewAspectId, number>;
 };
