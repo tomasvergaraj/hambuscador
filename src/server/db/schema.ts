@@ -246,6 +246,50 @@ export const favorites = pgTable(
 );
 
 /**
+ * Solicitudes de claim — un dueño/representante reclama un local para
+ * volverse owner. Admin revisa proof + aprueba/rechaza. Aprobar setea
+ * `places.claimed_by` al user y `places.is_verified = true`.
+ *
+ * No hay UNIQUE strict para permitir reintentos: un user puede claim
+ * el mismo local múltiples veces si la primera fue rechazada. La app
+ * valida en runtime que no haya un pending del mismo (place_id, user_id).
+ *
+ * Migration: drizzle/2026-05-08-place-claims.sql
+ */
+export const claimStatusEnum = ["pending", "approved", "rejected"] as const;
+export type ClaimStatus = (typeof claimStatusEnum)[number];
+
+export const placeClaims = pgTable(
+  "place_claims",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: claimStatusEnum }).notNull().default("pending"),
+    /** URL pública (R2) de imagen subida como prueba (cert SII, foto del local, etc). */
+    proofUrl: text("proof_url"),
+    /** Mensaje libre del usuario al admin. */
+    message: text("message"),
+    contactEmail: text("contact_email").notNull(),
+    contactPhone: text("contact_phone"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    /** Razón de rechazo (opcional, para feedback al user). */
+    rejectionReason: text("rejection_reason"),
+  },
+  (table) => ({
+    placeIdx: index("place_claims_place_idx").on(table.placeId),
+    statusIdx: index("place_claims_status_idx").on(table.status),
+    userIdx: index("place_claims_user_idx").on(table.userId),
+  }),
+);
+
+/**
  * Catálogo de comunas de Chile (346). Tabla seeded con metadata cartográfica
  * (centroide). Source of truth para el dropdown de `/agregar`, las sugerencias
  * de `/api/search/suggest` y los filtros server-rendered.
@@ -329,7 +373,9 @@ export type DbFavorite = typeof favorites.$inferSelect;
 export type DbSearchLog = typeof searchLogs.$inferSelect;
 export type DbRegion = typeof regions.$inferSelect;
 export type DbComuna = typeof comunas.$inferSelect;
+export type DbPlaceClaim = typeof placeClaims.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;
 export type NewDbSearchLog = typeof searchLogs.$inferInsert;
+export type NewDbPlaceClaim = typeof placeClaims.$inferInsert;
