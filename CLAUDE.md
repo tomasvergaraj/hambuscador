@@ -412,7 +412,7 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-07 (sesión 3)**: Fases 0-4 cerradas + descubrimiento, búsqueda y admin pulidos a nivel viral. **MVP en producción** en `https://hambuscador.vercel.app`.
+**Estado al 2026-05-08 (sesión 4)**: Fases 0-4 cerradas + autocomplete de búsqueda, search del mapa con flyTo, search analytics. **MVP en producción** en `https://hambuscador.vercel.app`.
 
 ### Deploy actual
 
@@ -440,6 +440,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 **Migraciones aplicadas a mano en Neon prod** (drizzle-kit no corre en Vercel build):
 - `drizzle/2026-05-07-hours-by-day-banned-cursor.sql` — `places.hours_by_day` jsonb, `users.banned_at` timestamptz, índice cursor `reviews_created_at_idx`. Ya en prod ✅.
 - `drizzle/2026-05-07-search-unaccent.sql` — `unaccent` extension, función IMMUTABLE `f_unaccent`, reindex GIN trigram en `f_unaccent(lower(name|comuna_label|specialty))`. Ya en prod ✅.
+- `drizzle/2026-05-08-search-logs.sql` — tabla `search_logs` con índices (normalized_query, created_at, partial zero-hit). Alimenta `/admin/search`. Ya en prod ✅.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
@@ -548,6 +549,32 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección aprendida: `pnpm build` y `pnpm dev` comparten `.next/`. Correr build pisa los manifests del dev y rompe HMR. Para verificar producción usar `pnpm typecheck` + `pnpm lint` localmente; si necesitás `pnpm build`, kill el dev primero.
 - ✅ Bug histórico: Vercel build con eslint más estricto que tsc local. Errores típicos: `react/no-unescaped-entities` en comillas y `@typescript-eslint/no-unused-vars`. Si sospechás, correr `pnpm lint` antes de pushear.
 
+### Hecho en esta sesión (2026-05-08 sesión 4)
+
+#### Autocomplete de búsqueda
+- ✅ Endpoint compartido `src/app/api/search/suggest/route.ts` que devuelve 4 secciones: `places` (top hits del searchPlaces), `picas` (matches por title/hook), `comunas`, `regions`. Coords incluidas en places/comunas/regions para flyTo sin round-trip.
+- ✅ Hook `src/lib/use-search-suggestions.ts` con debounce 150ms + AbortController para cancelar requests en vuelo. Compartido por home + mapa.
+- ✅ `<HomeSearchInput>` reescrito: dropdown sectionado (locales, listas, comunas), keyboard nav `↑↓ Enter Esc`, ARIA combobox-listbox con `aria-activedescendant`, click fuera cierra. NO es live — submit/click navega al destino.
+- ✅ `/buscar` lista: tarjeta inline "lista relacionada" arriba de los resultados cuando la query (≥3 chars) matchea el title/hook de un /picas. Server-rendered, cero JS.
+
+#### Search del mapa con flyTo
+- ✅ `<MapSearchInput>` (nuevo, `src/components/place/map-search-input.tsx`) reemplaza `<LiveSearchInput>` en `?vista=mapa`. Sigue filtrando los pines live (push de `?q=` debounced 200ms) **y** abre dropdown con 4 secciones.
+- ✅ Click en local → `flyTo(coords, zoom 16)`. Comuna → centroide zoom 13. Región → centroide zoom 9. Picá → navega a `/picas/[slug]` (única que abandona el mapa).
+- ✅ Coordinación input ↔ mapa vía window `CustomEvent("hambuscador:flyTo")` — decoupled, no hay ref compartido. `<PlacesMap>` agrega listener al window y llama `map.flyTo({...detail, duration: 900, essential: true})`.
+- ✅ `REGIONS_REGISTRY` en `src/lib/constants.ts` (RM, Valparaíso) con centroide + zoom sugerido. Hardcoded mientras el catálogo sea pequeño.
+- ✅ `searchPlaces` ahora también matchea `places.region` (peso 0.7, entre comuna 1.0 y address 0.5). Sin esto, escribir "metropolitana" filtraba pines a 0 aunque hubiera locales en RM.
+
+#### Search analytics
+- ✅ Migration `2026-05-08-search-logs.sql` aplicada en prod. Tabla `search_logs` con índices: `normalized_query`, `created_at DESC`, partial `WHERE result_count = 0` (cheap reports de zero-hit).
+- ✅ Service `src/server/services/search-logs.ts`: `logSearch` (try/catch + fire-and-forget), `getPopularQueries`, `getZeroHitQueries`, `getSearchSummary`. Agregación por `normalized_query` así "Quillota"/"quillota"/"QUILLOTA" cuentan juntos.
+- ✅ `/buscar` server page dispara `logSearch` vía `next/after()` después de tener results — no bloquea el render. Source `"list"` o `"map"` según `vista`. Solo loguea si `query.trim().length > 0` (no contar visitas a /buscar vacío).
+- ✅ `/admin/search` dashboard con summary cards (total · únicas · sin resultados · fuzzy fallback), tabs 24h/7d/30d, top queries por cantidad, sin-resultados últimos 30d. Tab "búsquedas" agregado al admin nav.
+
+#### DX
+- ✅ Lección: `/api/search/suggest` debounced 150ms con `AbortController` evita ~3-5 fetches por keystroke. La API solo loguearía ruido — el logging va en /buscar (página completa) y no en suggest.
+- ✅ Lección: `next/after()` (Next 15) corre callbacks después de mandar la respuesta. Ideal para fire-and-forget de logging/analytics sin bloquear TTFB.
+- ✅ Lección: cuando se agrega un campo nuevo a la búsqueda en `searchPlaces` (`region`), también hay que sumarlo al `scoreFor` (no solo al `matchClauseFor`) — sino los matches existen pero quedan en el fondo del orden.
+
 ### Próximos pasos pendientes
 
 #### Deploy / infra
@@ -563,9 +590,10 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 2. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
 3. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
 4. **Más listas curadas en /picas** según crezca el catálogo: por comuna específica, por horario nocturno, por temática. Hardcoded por ahora; mover a tabla `picas_lists` con CRUD admin cuando se justifique.
-5. **Search analytics**: log de queries (qué tipean los users, cuáles dan 0 hits) para informar nuevos sinónimos y/o suggestions.
-6. **Autocomplete en search**: dropdown debajo del input con sugerencias (top hits + listas + comunas). Trabajo más grande, otra sesión.
+5. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
+6. **Autocomplete en `/buscar` (LiveSearchInput)**: hoy el dropdown vive solo en home + mapa. En vista lista, los results live YA cubren places, pero todavía falta jump a comuna/región sin escribir. Evaluar si vale agregar (es duplicativo con la card "lista relacionada" inline + filtros).
 7. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
+8. **Más regiones en `REGIONS_REGISTRY`**: hoy solo RM + Valparaíso (las únicas con places). Cuando aporten desde Concepción/Antofagasta/etc., sumar al registry o derivar dinámicamente de los `places.region` distintos en DB.
 
 #### Fase 5 — engagement (nada empezado)
 
