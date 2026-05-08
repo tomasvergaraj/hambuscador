@@ -239,17 +239,36 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             </h2>
             <article className="bg-crema-deep rounded-lg border border-mostaza/40 p-3">
               <header className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
-                    {mine.authorInitials}
+                {mine.authorUsername ? (
+                  <Link
+                    href={`/u/${mine.authorUsername}`}
+                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
+                      {mine.authorInitials}
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-carbon">
+                        {mine.authorName}
+                      </p>
+                      <p className="text-[10px] text-bronceado">
+                        {"★".repeat(mine.rating)} · hace {daysSince(mine.createdAt)}
+                      </p>
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
+                      {mine.authorInitials}
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-carbon">{mine.authorName}</p>
+                      <p className="text-[10px] text-bronceado">
+                        {"★".repeat(mine.rating)} · hace {daysSince(mine.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-carbon">{mine.authorName}</p>
-                    <p className="text-[10px] text-bronceado">
-                      {"★".repeat(mine.rating)} · hace {daysSince(mine.createdAt)}
-                    </p>
-                  </div>
-                </div>
+                )}
                 <div className="flex items-center gap-1">
                   <Link
                     href={`/${place.comuna}/${place.slug}/calificar`}
@@ -296,27 +315,39 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                   key={review.id}
                   className="bg-crema-deep rounded-lg border border-crema-edge p-3"
                 >
-                  <header className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
-                      {review.authorInitials}
-                    </div>
-                    <div>
-                      {review.authorUsername ? (
-                        <Link
-                          href={`/u/${review.authorUsername}`}
-                          className="text-xs font-medium text-carbon hover:text-mostaza-deep transition-colors"
-                        >
-                          {review.authorName}
-                        </Link>
-                      ) : (
-                        <p className="text-xs font-medium text-carbon">
-                          {review.authorName}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-bronceado">
-                        {"★".repeat(review.rating)} · hace {daysSince(review.createdAt)}
-                      </p>
-                    </div>
+                  <header className="mb-2">
+                    {review.authorUsername ? (
+                      <Link
+                        href={`/u/${review.authorUsername}`}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
+                          {review.authorInitials}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-carbon">
+                            {review.authorName}
+                          </p>
+                          <p className="text-[10px] text-bronceado">
+                            {"★".repeat(review.rating)} · hace {daysSince(review.createdAt)}
+                          </p>
+                        </div>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
+                          {review.authorInitials}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-carbon">
+                            {review.authorName}
+                          </p>
+                          <p className="text-[10px] text-bronceado">
+                            {"★".repeat(review.rating)} · hace {daysSince(review.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </header>
                   {review.text && (
                     <p className="text-xs text-carbon leading-relaxed">{review.text}</p>

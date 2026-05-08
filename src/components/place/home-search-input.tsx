@@ -7,6 +7,7 @@ import {
   IconRosetteDiscountCheckFilled,
   IconSearch,
   IconStarFilled,
+  IconUser,
 } from "@tabler/icons-react";
 
 import { PicaIcon } from "@/components/place/pica-icon";
@@ -16,6 +17,7 @@ import {
   type ComunaSuggestion,
   type PicaSuggestion,
   type PlaceSuggestion,
+  type UserSuggestion,
 } from "@/lib/use-search-suggestions";
 import { cn } from "@/lib/utils";
 
@@ -45,12 +47,13 @@ export function HomeSearchInput() {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const suggestions = useSearchSuggestions(value);
 
-  // Lista plana para keyboard nav: places → picas → comunas, en ese orden.
+  // Lista plana para keyboard nav: places → picas → comunas → users.
   // Las regions se omiten en home (no hay flyTo aquí).
   type Item =
     | { kind: "place"; data: PlaceSuggestion; href: string }
     | { kind: "pica"; data: PicaSuggestion; href: string }
-    | { kind: "comuna"; data: ComunaSuggestion; href: string };
+    | { kind: "comuna"; data: ComunaSuggestion; href: string }
+    | { kind: "user"; data: UserSuggestion; href: string };
   const items = React.useMemo<Item[]>(() => {
     const list: Item[] = [];
     for (const p of suggestions.places) {
@@ -61,6 +64,9 @@ export function HomeSearchInput() {
     }
     for (const c of suggestions.comunas) {
       list.push({ kind: "comuna", data: c, href: `/buscar?q=${encodeURIComponent(c.label)}` });
+    }
+    for (const u of suggestions.users) {
+      list.push({ kind: "user", data: u, href: `/u/${u.username}` });
     }
     return list;
   }, [suggestions]);
@@ -262,6 +268,44 @@ export function HomeSearchInput() {
                   </span>
                   <span className="block text-[11px] text-tinta-suave">
                     ver picás de la comuna
+                  </span>
+                </span>
+              </Option>
+            );
+          })}
+
+          {suggestions.users.length > 0 && (
+            <SectionHeader>usuarios</SectionHeader>
+          )}
+          {suggestions.users.map((u, i) => {
+            const idx =
+              suggestions.places.length +
+              suggestions.picas.length +
+              suggestions.comunas.length +
+              i;
+            return (
+              <Option
+                key={`user-${u.username}`}
+                id={`${LISTBOX_ID}-opt-${idx}`}
+                isActive={active === idx}
+                onClick={() => navigateTo(`/u/${u.username}`)}
+                onMouseEnter={() => setActive(idx)}
+              >
+                <span className="w-8 h-8 rounded-lg bg-lechuga/15 inline-flex items-center justify-center text-lechuga shrink-0">
+                  <IconUser size={16} stroke={1.75} aria-hidden="true" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium text-carbon truncate">
+                    {u.name}
+                  </span>
+                  <span className="block text-[11px] text-tinta-suave truncate">
+                    @{u.username}
+                    {u.reviewCount > 0 && (
+                      <>
+                        <span className="mx-1">·</span>
+                        {u.reviewCount} {u.reviewCount === 1 ? "reseña" : "reseñas"}
+                      </>
+                    )}
                   </span>
                 </span>
               </Option>

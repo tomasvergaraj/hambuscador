@@ -29,6 +29,7 @@ import {
   getAllComunas as getAllComunasSvc,
 } from "@/server/services/comunas";
 import { getActiveRegions as getActiveRegionsSvc } from "@/server/services/regions";
+import { searchPublicUsers as searchPublicUsersSvc } from "@/server/services/users";
 import { getReviewsByPlaceId as getReviewsByPlaceIdSvc } from "@/server/services/reviews";
 import {
   MOCK_PLACES,
@@ -161,6 +162,16 @@ export const getAllComunas = cache(
   async () => getAllComunasSvc(),
   ["comunas-all"],
   { revalidate: 86400 },
+);
+
+/**
+ * Sugerencias de perfiles públicos para el dropdown global. Cache corto —
+ * la activity (review_count) cambia con cada review que postean.
+ */
+export const searchPublicUsers = cache(
+  async (q: string) => searchPublicUsersSvc(q),
+  ["users-public-search"],
+  { revalidate: 60, tags: ["users"] },
 );
 
 /**

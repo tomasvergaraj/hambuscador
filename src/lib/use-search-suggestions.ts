@@ -47,11 +47,18 @@ export type RegionSuggestion = {
   zoom: number;
 };
 
+export type UserSuggestion = {
+  username: string;
+  name: string;
+  reviewCount: number;
+};
+
 export type SearchSuggestions = {
   places: PlaceSuggestion[];
   picas: PicaSuggestion[];
   comunas: ComunaSuggestion[];
   regions: RegionSuggestion[];
+  users: UserSuggestion[];
 };
 
 const EMPTY: SearchSuggestions = {
@@ -59,6 +66,7 @@ const EMPTY: SearchSuggestions = {
   picas: [],
   comunas: [],
   regions: [],
+  users: [],
 };
 
 export function useSearchSuggestions(value: string): SearchSuggestions {

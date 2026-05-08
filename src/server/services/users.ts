@@ -76,6 +76,60 @@ export async function getUserById(id: string): Promise<DbUser | null> {
   return row ?? null;
 }
 
+export type PublicUserSuggestion = {
+  username: string;
+  name: string;
+  reviewCount: number;
+};
+
+/**
+ * Búsqueda de perfiles públicos para el dropdown global. Match por username
+ * (ASCII) o name. Solo retorna usuarios CON username (los privados quedan
+ * fuera) y NO baneados. Limit chico (4) — no es el caso primario del dropdown.
+ */
+export async function searchPublicUsers(
+  query: string,
+  opts?: { limit?: number },
+): Promise<PublicUserSuggestion[]> {
+  if (!isDbConfigured()) return [];
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const { limit = 4 } = opts ?? {};
+
+  const db = getDb();
+  // Strip @ inicial si el user lo tipeó.
+  const normalized = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  const pattern = `%${normalized.toLowerCase()}%`;
+
+  const rows = await db
+    .select({
+      username: users.username,
+      name: users.name,
+      reviewCount: users.reviewCount,
+    })
+    .from(users)
+    .where(
+      sql`${users.username} IS NOT NULL
+        AND ${users.bannedAt} IS NULL
+        AND (
+          LOWER(${users.username}) LIKE ${pattern}
+          OR LOWER(${users.name}) LIKE ${pattern}
+        )`,
+    )
+    .orderBy(desc(users.reviewCount))
+    .limit(limit);
+
+  return rows
+    .filter((r): r is { username: string; name: string | null; reviewCount: number } =>
+      Boolean(r.username),
+    )
+    .map((r) => ({
+      username: r.username,
+      name: r.name ?? `@${r.username}`,
+      reviewCount: r.reviewCount,
+    }));
+}
+
 /**
  * Lookup por username público. Excluye baneados (coherente con el ban
  * retroactivo en lecturas públicas). Para `/u/[username]`.

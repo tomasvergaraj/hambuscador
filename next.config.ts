@@ -30,6 +30,16 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["@tabler/icons-react"],
   },
+  // Atajo viral: hambuscador.cl/@camila → /u/camila. Internal rewrite, la
+  // URL en la barra del navegador queda con @ (más memorable, estilo Twitter).
+  async rewrites() {
+    return [
+      {
+        source: "/@:username",
+        destination: "/u/:username",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

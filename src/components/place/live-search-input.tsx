@@ -7,6 +7,7 @@ import {
   IconRosetteDiscountCheckFilled,
   IconSearch,
   IconStarFilled,
+  IconUser,
   IconWorld,
 } from "@tabler/icons-react";
 
@@ -16,6 +17,7 @@ import {
   type ComunaSuggestion,
   type PlaceSuggestion,
   type RegionSuggestion,
+  type UserSuggestion,
 } from "@/lib/use-search-suggestions";
 import { cn } from "@/lib/utils";
 
@@ -96,17 +98,19 @@ export function LiveSearchInput({ initialValue, ...rest }: Props) {
     pushQuery("");
   };
 
-  // Lista plana para keyboard nav: places → regions → comunas.
+  // Lista plana para keyboard nav: places → regions → comunas → users.
   // Skip picas — la card "lista relacionada" inline ya cubre ese caso.
   type Item =
     | { kind: "place"; data: PlaceSuggestion }
     | { kind: "region"; data: RegionSuggestion }
-    | { kind: "comuna"; data: ComunaSuggestion };
+    | { kind: "comuna"; data: ComunaSuggestion }
+    | { kind: "user"; data: UserSuggestion };
   const items = React.useMemo<Item[]>(() => {
     const list: Item[] = [];
     for (const p of suggestions.places) list.push({ kind: "place", data: p });
     for (const r of suggestions.regions) list.push({ kind: "region", data: r });
     for (const c of suggestions.comunas) list.push({ kind: "comuna", data: c });
+    for (const u of suggestions.users) list.push({ kind: "user", data: u });
     return list;
   }, [suggestions]);
 
@@ -132,6 +136,10 @@ export function LiveSearchInput({ initialValue, ...rest }: Props) {
 
     if (item.kind === "place") {
       router.push(`/${item.data.comuna}/${item.data.slug}`);
+      return;
+    }
+    if (item.kind === "user") {
+      router.push(`/u/${item.data.username}`);
       return;
     }
 
@@ -308,6 +316,40 @@ export function LiveSearchInput({ initialValue, ...rest }: Props) {
                   </span>
                   <span className="block text-[11px] text-tinta-suave">
                     filtrar por la comuna
+                  </span>
+                </span>
+              </Option>
+            );
+          })}
+
+          {suggestions.users.length > 0 && (
+            <SectionHeader>usuarios</SectionHeader>
+          )}
+          {suggestions.users.map((u) => {
+            const idx = cursor++;
+            return (
+              <Option
+                key={`user-${u.username}`}
+                id={`${LISTBOX_ID}-opt-${idx}`}
+                isActive={active === idx}
+                onClick={() => pickItem({ kind: "user", data: u })}
+                onMouseEnter={() => setActive(idx)}
+              >
+                <span className="w-8 h-8 rounded-lg bg-lechuga/15 inline-flex items-center justify-center text-lechuga shrink-0">
+                  <IconUser size={16} stroke={1.75} aria-hidden="true" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium text-carbon truncate">
+                    {u.name}
+                  </span>
+                  <span className="block text-[11px] text-tinta-suave truncate">
+                    @{u.username}
+                    {u.reviewCount > 0 && (
+                      <>
+                        <span className="mx-1">·</span>
+                        {u.reviewCount} {u.reviewCount === 1 ? "reseña" : "reseñas"}
+                      </>
+                    )}
                   </span>
                 </span>
               </Option>

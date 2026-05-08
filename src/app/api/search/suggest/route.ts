@@ -17,13 +17,18 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getActiveComunas, getActiveRegions, searchPlaces } from "@/lib/data";
+import {
+  getActiveComunas,
+  getActiveRegions,
+  searchPlaces,
+  searchPublicUsers,
+} from "@/lib/data";
 import { PICAS_LISTS } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 
 export const runtime = "nodejs";
 
-const EMPTY = { places: [], picas: [], comunas: [], regions: [] };
+const EMPTY = { places: [], picas: [], comunas: [], regions: [], users: [] };
 
 export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
@@ -81,8 +86,10 @@ export async function GET(req: NextRequest) {
       zoom: r.zoom,
     }));
 
+  const users = await searchPublicUsers(q);
+
   return NextResponse.json(
-    { places, picas, comunas, regions },
+    { places, picas, comunas, regions, users },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
