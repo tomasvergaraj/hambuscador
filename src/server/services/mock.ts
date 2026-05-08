@@ -176,7 +176,8 @@ export function searchPlacesMock(
   });
 
   // 2. Grupos: cada grupo (con sus alternativas OR) tiene que matchear al
-  //    menos un campo. AND entre grupos.
+  //    menos un campo. AND entre grupos. Featured suma como tiebreaker
+  //    después de relevancia (no rompe el match — boost solo entre similares).
   if (groups.length > 0) {
     const matched = result
       .map((p) => {
@@ -194,12 +195,19 @@ export function searchPlacesMock(
         return { p, score };
       })
       .filter((x): x is { p: Place; score: number } => x !== null)
-      .sort((a, b) => b.score - a.score || bayesMock(b.p) - bayesMock(a.p));
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          Number(b.p.isFeatured) - Number(a.p.isFeatured) ||
+          bayesMock(b.p) - bayesMock(a.p),
+      );
 
     return { items: matched.map((x) => x.p), usedFuzzy: false };
   }
 
-  // 3. Sin tokens útiles: sort default sobre los filtrados.
+  // 3. Sin tokens útiles: sort default sobre los filtrados. Featured boost
+  //    en rating/popularity (donde no hay un eje específico que respetar).
+  //    Distance/recent quedan honestos al eje elegido por el usuario.
   if (filters?.sort === "distance" && filters.userCoords) {
     const { lat, lng } = filters.userCoords;
     result = [...result].sort((a, b) => {
@@ -210,9 +218,17 @@ export function searchPlacesMock(
   } else if (filters?.sort === "recent") {
     result = [...result];
   } else if (filters?.sort === "popularity") {
-    result = [...result].sort((a, b) => bayesMock(b) - bayesMock(a));
+    result = [...result].sort(
+      (a, b) =>
+        Number(b.isFeatured) - Number(a.isFeatured) ||
+        bayesMock(b) - bayesMock(a),
+    );
   } else {
-    result = [...result].sort((a, b) => b.rating - a.rating);
+    result = [...result].sort(
+      (a, b) =>
+        Number(b.isFeatured) - Number(a.isFeatured) ||
+        b.rating - a.rating,
+    );
   }
 
   return { items: result, usedFuzzy: false };

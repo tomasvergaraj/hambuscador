@@ -123,12 +123,14 @@ export async function getPlacesNearby(opts?: {
     return rows.map((r) => dbPlaceToUi(r.place, Number(r.distanceM)));
   }
 
-  // Fallback: solo locales aprobados, ordenados por rating
+  // Fallback (sin coords): destacados primero, luego por rating.
+  // Con coords NO se aplica el boost — el usuario espera "lo más cerca",
+  // forzar un featured lejos rompe la expectativa.
   const rows = await db
     .select()
     .from(places)
     .where(eq(places.moderationStatus, "approved"))
-    .orderBy(sql`rating_avg DESC NULLS LAST`)
+    .orderBy(sql`is_featured DESC, rating_avg DESC NULLS LAST`)
     .limit(limit);
 
   return rows.map((row) => dbPlaceToUi(row));
@@ -282,15 +284,18 @@ export async function searchPlaces(opts: {
         .limit(limit);
       return rows.map((r) => dbPlaceToUi(r.place, Number(r.distanceM)));
     }
+    // Featured boost: destacados (publicidad) suben primero en sorts donde
+    // la "honestidad" no es central. Distance y recent quedan sin boost
+    // (el usuario eligió un eje específico — respetarlo es transparente).
     const fallbackOrder =
       sort === "recent"
         ? sql`created_at DESC`
         : sort === "popularity"
-          ? sql`(
+          ? sql`is_featured DESC, (
               (COALESCE(review_count, 0)::numeric * COALESCE(rating_avg, 4.0) + 5 * 4.0)
               / (COALESCE(review_count, 0) + 5)
             ) DESC, review_count DESC, rating_avg DESC NULLS LAST`
-          : sql`rating_avg DESC NULLS LAST`;
+          : sql`is_featured DESC, rating_avg DESC NULLS LAST`;
     const rows = await db
       .select()
       .from(places)
@@ -364,12 +369,13 @@ export async function searchPlaces(opts: {
         : sql`0`;
     const score = sql<number>`(${sql.join(scoreTerms, sql` + `)} + ${phraseBonus})`;
 
-    // Order: relevancia primero, después popularidad (bayes), después
-    // distancia si hay coords, después rating crudo.
+    // Order: relevancia primero (no romper el match search), después
+    // featured como tiebreaker entre resultados de score similar, después
+    // popularidad (bayes), distancia si aplica, rating crudo.
     const orderBy =
       sort === "distance" && userCoords
-        ? sql`${score} DESC, ${bayesRating} DESC, distance_m ASC, rating_avg DESC NULLS LAST`
-        : sql`${score} DESC, ${bayesRating} DESC, rating_avg DESC NULLS LAST`;
+        ? sql`${score} DESC, is_featured DESC, ${bayesRating} DESC, distance_m ASC, rating_avg DESC NULLS LAST`
+        : sql`${score} DESC, is_featured DESC, ${bayesRating} DESC, rating_avg DESC NULLS LAST`;
     mapped = await runQuery(conditions, orderBy);
 
     // Fuzzy fallback: si strict da 0 y el phrase tiene ≥ 3 chars, retry con
@@ -377,7 +383,7 @@ export async function searchPlaces(opts: {
     if (mapped.length === 0 && phrase.length >= 3) {
       const fuzzyClause = sql`similarity(f_unaccent(lower(${places.name})), ${phrase}) > 0.3`;
       const fuzzyConditions = [...baseConditions, fuzzyClause];
-      const fuzzyOrder = sql`similarity(f_unaccent(lower(${places.name})), ${phrase}) DESC, ${bayesRating} DESC`;
+      const fuzzyOrder = sql`similarity(f_unaccent(lower(${places.name})), ${phrase}) DESC, is_featured DESC, ${bayesRating} DESC`;
       const fuzzy = await runQuery(fuzzyConditions, fuzzyOrder);
       if (fuzzy.length > 0) {
         mapped = fuzzy;
