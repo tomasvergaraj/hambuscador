@@ -5,8 +5,10 @@ import {
   IconMapPin,
   IconPhone,
   IconBrandInstagram,
+  IconPhoto,
   IconX,
 } from "@tabler/icons-react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
@@ -81,14 +83,36 @@ function PendingPlaceCard({
           </span>
         </div>
       )}
-      <header className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="font-display font-semibold text-base text-carbon">{place.name}</h2>
-          <p className="text-[11px] text-bronceado">
+      <header className="flex items-start gap-3">
+        {/* Thumb: logo > primera foto > placeholder. En pending el logo es
+            poco probable (admin-only) pero soportamos por consistencia. */}
+        <div className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden bg-mostaza-deep flex items-center justify-center border border-crema-edge">
+          {place.logo || place.photos[0] ? (
+            <Image
+              src={place.logo ?? place.photos[0]!}
+              alt={place.name}
+              fill
+              sizes="64px"
+              className="object-cover"
+            />
+          ) : (
+            <IconPhoto
+              size={22}
+              stroke={1.5}
+              className="text-crema-deep opacity-60"
+              aria-hidden="true"
+            />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-display font-semibold text-base text-carbon truncate">
+            {place.name}
+          </h2>
+          <p className="text-[11px] text-bronceado truncate">
             /{place.comuna}/{place.slug}
           </p>
         </div>
-        <span className="text-[10px] uppercase tracking-widest font-medium text-mostaza-deep bg-mostaza/15 px-2 py-1 rounded">
+        <span className="text-[10px] uppercase tracking-widest font-medium text-mostaza-deep bg-mostaza/15 px-2 py-1 rounded shrink-0">
           pending
         </span>
       </header>
