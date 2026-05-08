@@ -412,7 +412,7 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-08 (sesión 5)**: Fases 0-4 cerradas + Fase 5 inicial (perfiles públicos /u/[username], reseñas compartibles /r/[id] con OG propio). Catálogo geo dinamizado a 16 regiones + 346 comunas oficiales de Chile. Ban retroactivo, autocomplete /buscar, descubrimiento de perfiles vía search. **Dominio `hambuscador.cl` comprado en NIC.cl con DNS en Cloudflare**, propagando a Vercel.
+**Estado al 2026-05-09 (sesión 6)**: Fases 0-4 cerradas + Fase 5 inicial (perfiles públicos, reseñas compartibles). **Carga real de Chile completa**: 1.481 places en prod via Google Places API (USD 13). **Claim flow MVP completo**: owners reclaman, admin aprueba, owners editan via /mi-local. **Branding extendido**: pin/cluster del mapa son hamburguesas SVG, featured tomate sale del cluster, logo de marca admin-only en cards/OG. **Reseña card** clickable + badge fotos. Dominio `.cl` propagando a Vercel (operativo aún en `*.vercel.app`).
 
 ### Deploy actual
 
@@ -624,6 +624,65 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: no usar `<details>` dentro de un padre `flex items-center` — el contenido expandido descentra el cross-axis. Toggle de state local + cambio a layout column es la solución limpia.
 - ✅ Lección: los 3 dropdowns (HomeSearchInput, LiveSearchInput, MapSearchInput) tienen lógica casi idéntica para keyboard nav + sections. Quedan como código duplicado por ahora — refactor a `<SuggestionsDropdown>` compartido cuando se agregue una 4ta sección o vuelvan a divergir las acciones.
 - ✅ Lección: pasar 28KB de comunas como prop al cliente (en `/agregar`) es totalmente válido. Filter client-side > server action por keystroke. Cuando el catálogo justifique server-search, cambiar entonces.
+
+### Hecho en esta sesión (2026-05-09 sesión 6)
+
+#### Branding del mapa
+- ✅ Pin default: SVG burger en teardrop mostaza con stroke carbon (`burger-pin`).
+- ✅ Pin destacado: fondo **tomate** (no solo borde) + halo glow tomate. SVG `burger-pin-featured`. **Source aparte `places-featured` SIN clustering** — siempre visible en cualquier zoom, nunca absorbidos por los círculos negros del cluster.
+- ✅ Cluster: SVG hamburguesa completa (top bun + sésamo + lechuga + patty oscura + bottom bun). Patty es el "fondo" del count. icon-size step por point_count → más locales = icono más grande.
+- ✅ Count visible en ambos modos (PMTILES + OSM raster) — agregamos `glyphs: PROTOMAPS_FONTS_URL` al style OSM. Halo carbon + crema sobre la patty.
+- ✅ Mapa pide **5000 places** (vs 30 default de la lista) con `?vista=mapa` — el usuario espera ver todo Chile en el mapa, no solo los más cercanos.
+
+#### Featured / publicidad
+- ✅ `places.is_featured` boolean default false + migration. Admin lo togglea en `/admin/places/[id]/edit` (sección flags).
+- ✅ Badge "destacado" en PlaceCard (compact = sparkles tomate al lado del nombre; featured grande = pill tomate sólido top-right) y pill en ficha.
+- ✅ Featured prioriza listados: `is_featured DESC` primero en sort default rating + popularity. Distance/recent quedan honestos al eje elegido. Con query: `score DESC, is_featured DESC, bayes DESC` — featured tiebreaker entre matches, no rompe relevance.
+
+#### Logo de marca admin-only
+- ✅ `places.logo` text + migration. Solo admin lo setea desde `/admin/places/[id]/edit` con `<PhotoUploader max={1}>`.
+- ✅ PlaceCard compact (78×78) y `/admin/places` (40×40), `/admin/moderacion` (64×64) usan `place.logo ?? photos[0]`. **`object-cover`** llena el thumb completo (antes `object-contain` dejaba bordes mostaza).
+- ✅ OG dinámica `/[comuna]/[slug]/opengraph-image.tsx`: cuando hay logo, lo incrusta en card crema 260×260 con drop-shadow (en vez de BrandIconSvg placeholder). Foto del local NO se incrusta (peso ~600KB, fuera del límite WhatsApp).
+
+#### Contacto en ficha
+- ✅ `places.whatsapp` text + classifier que rutea Google `websiteUri`: wa.me/<digits> → whatsapp; instagram.com/<handle> → instagram; otro → website. Edge cases: `wa.me/message/<id>` (click-to-chat) preserva URL completa; IG handles reservados (/p/, /explore/) preservan como website.
+- ✅ Botones de contacto en ficha del local convertidos a `<ActionLink>` accionables: mapa → google.com/maps con coords, llamar → tel:, whatsapp → wa.me/<digits> (o URL si tiene letras), instagram → instagram.com/<handle>, sitio web → URL con scheme. Wizard `/agregar` y admin edit ahora capturan whatsapp + sitio web.
+
+#### Carousel + reseña UX
+- ✅ `<PhotoCarousel>` client component en hero del detail: scroll-snap horizontal nativo + IntersectionObserver para tracking del slide activo. Dots dinámicos con elongación del activo (transición width 200ms). Utility `.scrollbar-hide` en globals.css.
+- ✅ Cards de reseña en ficha del local clickables a `/r/[id]` via stretched link pattern (z-10 transparent encima del contenido; profile link + edit/delete con z-20 ganan el click). Photos badge "N fotos" con IconCamera (mostaza para mine, lechuga para others).
+- ✅ Toast en `/admin/places/[id]/edit` reemplaza el mensaje "cambios guardados" de arriba — fixed bottom (sobre la sticky CTA) con animación `slideUp`. Verde 2.5s ok, tomate 5s error, cerrable manual con ×.
+
+#### Carga inicial real de Chile (Google Places API)
+- ✅ Script `scripts/seed-google.ts` con flag `--all` (lee 346 comunas de la tabla) y `--dry-run`. Field mask Enterprise (USD 35/1000) trae phone + hours + website. NO photos/reviews (ToS prohíbe cachear).
+- ✅ Filtros aplicados (en orden de severidad):
+  1. `includedType: hamburger_restaurant` + `strictTypeFiltering` server-side.
+  2. Comuna debe aparecer en formattedAddress (case+accent insensitive).
+  3. Bbox Chile: mainland + Rapa Nui + Juan Fernández.
+  4. Distancia haversine ≤80km del centroide oficial de la comuna.
+- ✅ Dedup por (comuna_slug, slug) contra DB existente.
+- ✅ websiteUri se clasifica antes de insertar (wa.me/IG → campo correcto).
+- ✅ **Run completo en Neon prod**: 369 requests = USD 12.92 (free credit USD 200/mes lo cubre). Resultado: **1.481 places approved** en las 16 regiones (RM 506, V 197, Maule 121, Biobío 105, O'Higgins 97, etc).
+- ✅ Cleanup post-seed: 37 places fuera de Chile + 24 mis-asignaciones (San Rafael Mendoza AR, San Pedro de Atacama mal asignado, etc.) eliminados. Rapa Nui + Juan Fernández preservados.
+
+#### Claim flow MVP (locales reclaman su ficha)
+- ✅ Tabla `place_claims` (place_id, user_id, status, proof_url, message, contact_email/phone, reviewed_at/by, rejection_reason). Migration aplicada en Neon.
+- ✅ Service `services/claims.ts`: createClaim, hasPendingClaim, getPendingClaims, countPendingClaims, approveClaim (transaccional: status approved + places.claimed_by + isVerified=true), rejectClaim, isOwnerOf, getMyOwnedPlaces.
+- ✅ `/[comuna]/[slug]/reclamar` page + form: email contacto + phone + message + proof image (PhotoUploader max=1). Bloquea pending dup. Detail page suma CTA "¿es tu local? reclámalo" (oculto si admin/owner; muestra "en revisión" si pending).
+- ✅ `/admin/claims` queue: lista pending con local + user + email + phone + mensaje + proof image inline + botones aprobar/rechazar. Tab "claims" en admin nav con badge tomate (count pending).
+- ✅ `/mi-local/[id]/editar` para owners (form restringido: logo, fotos, cuisines, precio, especialidad, horario, contacto). NO toca name/slug/comuna/lat/lng/flags. Auth check: admin OR isOwnerOf.
+- ✅ Detail page pencil routea según rol: admin → `/admin/places/[id]/edit` (full); owner → `/mi-local/[id]/editar` (restringido).
+- ✅ `/perfil` suma sección "mis locales (N)" cuando el user es owner verificado de algunos. Cada item linkea al editor restringido.
+- ✅ Acceso rápido al panel admin desde `/perfil` (carbon card con tile mostaza + badge count) — solo si `role=admin`. countPendingPlaces se carga en Promise.all solo cuando isAdmin.
+- ✅ `/admin/places/[id]/edit` suma sección "owner" (visible solo si is_claimed) con botón "revocar owner" via `useTransition` + window.confirm. Setea claimed_by=NULL, NO toca isVerified, place_claims preserva historial.
+
+#### DX
+- ✅ Commits por feature, push al final del bloque (5 commits del flow claims pusheados juntos).
+- ✅ Lección: `unstable_cache` serializa Date → string ISO en cache hits. `Intl.DateTimeFormat.format(string)` → `RangeError: Invalid time value`. Fix: `format(new Date(value))` tolera ambas formas.
+- ✅ Lección: nested `<form>` no es HTML válido. Para acciones secundarias dentro de un form (ej. revoke owner dentro del edit form), usar `<button onClick>` + `useTransition` + invocar la server action como function call.
+- ✅ Lección: scroll-snap CSS-only carousel con `<IntersectionObserver>` + threshold 0.6 es más estable que scroll handler para tracking del slide activo (que dispara N veces durante un swipe).
+- ✅ Lección: PostgreSQL `substring(text from 'pattern')` con POSIX regex captura grupos `()` directamente; `~*` es case-insensitive match. Útil para data fixes one-shot.
+- ✅ Lección: Google Places New API requiere fields explícitos en `X-Goog-FieldMask`. Pricing tier (Pro/Enterprise) depende de qué fields se piden. `includedType` + `strictTypeFiltering` filtran server-side mucho mejor que post-fetch.
 
 ### Próximos pasos pendientes
 
