@@ -28,6 +28,7 @@ import { getPlaceBySlug, getReviewsByPlaceId } from "@/lib/data";
 import { DAY_FULL_LABEL, DAY_KEYS, PRICE_RANGES, type DayKey } from "@/lib/constants";
 import { ShareButton } from "@/components/place/share-button";
 import { auth } from "@/server/auth";
+import { hasPendingClaim, isOwnerOf } from "@/server/services/claims";
 import { isFavorite } from "@/server/services/favorites";
 import { getMyReviewForPlace } from "@/server/services/reviews";
 
@@ -81,10 +82,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
   const [reviews, session] = await Promise.all([getReviewsByPlaceId(place.id), auth()]);
   const userId = session?.user?.id ?? null;
   const isAdmin = session?.user?.role === "admin";
-  const [myReview, favorited] = await Promise.all([
+  const [myReview, favorited, isOwner, claimPending] = await Promise.all([
     userId ? getMyReviewForPlace(place.id, userId) : Promise.resolve(null),
     userId ? isFavorite(userId, place.id) : Promise.resolve(false),
+    userId ? isOwnerOf(userId, place.id) : Promise.resolve(false),
+    userId ? hasPendingClaim(place.id, userId) : Promise.resolve(false),
   ]);
+  const canEdit = isAdmin || isOwner;
   const mine = myReview ? (reviews.find((r) => r.id === myReview.id) ?? null) : null;
   const others = mine ? reviews.filter((r) => r.id !== mine.id) : reviews;
 
@@ -118,11 +122,15 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             <IconArrowLeft size={18} aria-hidden="true" />
           </Link>
           <div className="flex gap-2">
-            {isAdmin && (
+            {canEdit && (
               <Link
-                href={`/admin/places/${place.id}/edit`}
-                aria-label="editar (admin)"
-                title="editar (admin)"
+                href={
+                  isAdmin
+                    ? `/admin/places/${place.id}/edit`
+                    : `/mi-local/${place.id}/editar`
+                }
+                aria-label={isAdmin ? "editar (admin)" : "editar mi local"}
+                title={isAdmin ? "editar (admin)" : "editar mi local"}
                 className="flex items-center justify-center w-9 h-9 rounded-full bg-carbon text-mostaza hover:bg-carbon-soft transition-[transform,colors] duration-150 active:scale-90"
               >
                 <IconPencil size={18} aria-hidden="true" />
@@ -277,6 +285,29 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             />
           )}
         </div>
+
+        {/* CTA reclamar — visible si el local no está claimed y el viewer
+            no es ni admin ni el owner. Si tiene claim pending, mostramos
+            estado en vez de botón. */}
+        {!place.isClaimed && !isAdmin && !isOwner && (
+          claimPending ? (
+            <div className="mt-4 rounded-md bg-mostaza/10 border border-mostaza/30 px-3 py-2 text-xs text-tinta-suave">
+              <span className="font-medium text-mostaza-deep">tu reclamo está en revisión.</span>{" "}
+              te avisamos por email cuando se apruebe.
+            </div>
+          ) : (
+            <Link
+              href={`/${place.comuna}/${place.slug}/reclamar`}
+              className="mt-4 inline-flex items-center justify-between gap-2 px-3 py-2.5 rounded-md bg-crema-deep border border-crema-edge hover:border-mostaza transition-[transform,colors] duration-150 active:scale-[0.98]"
+            >
+              <span className="text-xs text-carbon">
+                <span className="font-medium">¿es tu local?</span>{" "}
+                <span className="text-tinta-suave">reclámalo y edita la ficha</span>
+              </span>
+              <span className="text-mostaza-deep text-xs font-medium shrink-0">→</span>
+            </Link>
+          )
+        )}
 
         {/* Mi reseña — destacada con acciones edit/delete */}
         {mine && (
