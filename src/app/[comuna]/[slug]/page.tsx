@@ -250,7 +250,11 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
           )}
           {place.whatsapp && (
             <ActionLink
-              href={`https://wa.me/${digitsOnly(place.whatsapp)}`}
+              href={
+                place.whatsapp.startsWith("http")
+                  ? place.whatsapp
+                  : `https://wa.me/${digitsOnly(place.whatsapp)}`
+              }
               target="_blank"
               icon={IconBrandWhatsapp}
               label="whatsapp"

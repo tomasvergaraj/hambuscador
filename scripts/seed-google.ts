@@ -198,12 +198,31 @@ function classifyWebsite(url: string | undefined | null): {
 
   if (lower.includes("wa.me") || lower.includes("whatsapp.com")) {
     const m = u.match(/\d{8,}/);
-    return { website: null, whatsapp: m ? m[0] : null, instagram: null };
+    // Si extraemos dígitos (ej. wa.me/56912345678) guardamos solo eso —
+    // se puede formatear con espacios después. Si NO hay dígitos
+    // (ej. wa.me/message/<id> click-to-chat) preservamos el URL completo;
+    // el botón de WhatsApp en la ficha lo detecta y lo usa as-is.
+    return {
+      website: null,
+      whatsapp: m ? m[0] : u,
+      instagram: null,
+    };
   }
 
   if (lower.includes("instagram.com") || lower.includes("instagr.am")) {
     const m = u.match(/instagra(?:m\.com|m\.am)\/([^/?#]+)/i);
-    return { website: null, whatsapp: null, instagram: m && m[1] ? m[1] : null };
+    const raw = m && m[1] ? m[1] : null;
+    const handle = raw ? raw.replace(/^@/, "") : null;
+    // Skip rutas reservadas de IG (no son handles de perfil).
+    const reserved = new Set([
+      "p", "explore", "reel", "reels", "stories", "tv",
+      "accounts", "direct", "challenge", "developer", "about",
+    ]);
+    if (!handle || reserved.has(handle.toLowerCase())) {
+      // No es perfil válido — preserva URL como website (mejor que perderlo).
+      return { website: u, whatsapp: null, instagram: null };
+    }
+    return { website: null, whatsapp: null, instagram: handle };
   }
 
   return { website: u, whatsapp: null, instagram: null };
