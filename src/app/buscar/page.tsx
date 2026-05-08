@@ -1,6 +1,7 @@
 import { IconArrowLeft, IconList, IconMap } from "@tabler/icons-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { after } from "next/server";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { LiveSearchInput } from "@/components/place/live-search-input";
@@ -13,6 +14,8 @@ import { searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { PICAS_LISTS, type PicasList } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
+import { auth } from "@/server/auth";
+import { logSearch } from "@/server/services/search-logs";
 
 type SearchParams = {
   q?: string;
@@ -60,6 +63,21 @@ export default async function BuscarPage({
     sort: effectiveSort,
     userCoords: effectiveSort === "distance" ? (userCoords ?? undefined) : undefined,
   });
+
+  // Logging de la búsqueda — fire-and-forget vía `next/after()` para no bloquear
+  // el render. Solo si hay query (no nos interesa contar visitas a /buscar vacío).
+  if (query.trim().length > 0) {
+    const session = await auth();
+    after(() =>
+      logSearch({
+        query,
+        resultCount: results.length,
+        usedFuzzy,
+        userId: session?.user?.id ?? null,
+        source: view === "mapa" ? "map" : "list",
+      }),
+    );
+  }
 
   // ¿La query matchea una lista curada? Si es así, mostramos un atajo arriba
   // de los resultados — útil para que el usuario salte a la curaduría editorial

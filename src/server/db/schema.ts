@@ -226,6 +226,34 @@ export const favorites = pgTable(
   }),
 );
 
+/**
+ * Log de queries de /buscar. Una fila por visita (no por keystroke). Sirve
+ * para detectar queries populares y queries sin resultado, que son la base
+ * para nuevos sinónimos en `lib/search.ts`. Migración:
+ * `drizzle/2026-05-08-search-logs.sql`.
+ */
+export const searchLogs = pgTable(
+  "search_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Query tal como la tipeó el usuario (con tildes/case) — útil para mostrar muestras. */
+    query: text("query").notNull(),
+    /** Versión normalizada (lowercase + sin tildes) — clave de agregación. */
+    normalizedQuery: text("normalized_query").notNull(),
+    resultCount: integer("result_count").notNull(),
+    /** True si la búsqueda strict dio 0 y el fallback fuzzy salvó el día. */
+    usedFuzzy: boolean("used_fuzzy").notNull().default(false),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** "list" | "map" — vista de /buscar que disparó la búsqueda. */
+    source: text("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    normalizedIdx: index("search_logs_normalized_idx").on(table.normalizedQuery),
+    createdAtIdx: index("search_logs_created_at_idx").on(sql`${table.createdAt} DESC`),
+  }),
+);
+
 // ============================================================================
 // Tipos derivados — preferir estos antes que los de @/types/place cuando se
 // está en la capa de DB/server. Los de @/types/place son para la UI.
@@ -235,6 +263,8 @@ export type DbUser = typeof users.$inferSelect;
 export type DbPlace = typeof places.$inferSelect;
 export type DbReview = typeof reviews.$inferSelect;
 export type DbFavorite = typeof favorites.$inferSelect;
+export type DbSearchLog = typeof searchLogs.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;
+export type NewDbSearchLog = typeof searchLogs.$inferInsert;
