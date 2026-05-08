@@ -42,6 +42,21 @@ function buildFeatures(places: Place[]): Feature[] {
     }));
 }
 
+/**
+ * Separa features en `default` y `featured`. Los featured viven en una
+ * source aparte sin clustering — siempre visibles en cualquier zoom y
+ * nunca quedan absorbidos en los círculos negros del cluster.
+ */
+function splitFeatures(features: Feature[]): { default: Feature[]; featured: Feature[] } {
+  const def: Feature[] = [];
+  const fea: Feature[] = [];
+  for (const f of features) {
+    if (f.properties.featured) fea.push(f);
+    else def.push(f);
+  }
+  return { default: def, featured: fea };
+}
+
 // ============================================================================
 // Pin icons — burger en teardrop. Dos variantes:
 //   - default: borde carbon, fondo mostaza. Pin standard.
@@ -65,7 +80,7 @@ const BURGER_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="80" heigh
 
 const BURGER_PIN_FEATURED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="120" viewBox="0 0 48 60">
   <circle cx="24" cy="24" r="22" fill="#C84B31" opacity="0.22"/>
-  <path d="M24 4 C12 4 4 12 4 23 C4 35 16 49 24 57 C32 49 44 35 44 23 C44 12 36 4 24 4 Z" fill="#E8A02C" stroke="#C84B31" stroke-width="3"/>
+  <path d="M24 4 C12 4 4 12 4 23 C4 35 16 49 24 57 C32 49 44 35 44 23 C44 12 36 4 24 4 Z" fill="#C84B31" stroke="#1F1B17" stroke-width="2"/>
   <circle cx="24" cy="22" r="13" fill="#FAF6EE"/>
   <path d="M14 18 C14 14 18 11.5 24 11.5 C30 11.5 34 14 34 18 Z" fill="#E8A02C"/>
   <ellipse cx="19" cy="15" rx="0.6" ry="0.8" fill="#FAF6EE"/>
@@ -280,12 +295,23 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           // missing-image placeholder pequeño y el mapa sigue usable.
         }
 
+        // Dos sources distintos:
+        //  - `places`: defaults (no destacados), con clustering. Se agrupan
+        //    en círculos negros cuando son muchos en poco espacio.
+        //  - `places-featured`: destacados (publicidad), SIN clustering.
+        //    Siempre visibles en cualquier zoom — nunca quedan absorbidos
+        //    en un cluster, así el aviso vale la pena.
+        const split = splitFeatures(initialFeatures);
         map.addSource("places", {
           type: "geojson",
-          data: { type: "FeatureCollection", features: initialFeatures },
+          data: { type: "FeatureCollection", features: split.default },
           cluster: true,
           clusterRadius: 50,
           clusterMaxZoom: 14,
+        });
+        map.addSource("places-featured", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: split.featured },
         });
         sourceReadyRef.current = true;
 
@@ -330,27 +356,35 @@ export function PlacesMap({ places, userCoords, className }: Props) {
         }
 
         map.addLayer({
-          id: "pins",
+          id: "pins-default",
           type: "symbol",
           source: "places",
           filter: ["!", ["has", "point_count"]],
           layout: {
-            "icon-image": [
-              "case",
-              ["get", "featured"],
-              "burger-pin-featured",
-              "burger-pin",
-            ],
+            "icon-image": "burger-pin",
             "icon-anchor": "bottom",
-            // Permitimos overlap así no desaparecen pins en zooms bajos —
-            // mejor superpuestos que ausentes (hay popup para desambiguar).
+            // Overlap así no desaparecen pins en zooms bajos.
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             "icon-size": 1,
           },
         });
 
-        map.on("click", "pins", (e) => {
+        // Featured va último → render encima de clusters y pins-default.
+        map.addLayer({
+          id: "pins-featured",
+          type: "symbol",
+          source: "places-featured",
+          layout: {
+            "icon-image": "burger-pin-featured",
+            "icon-anchor": "bottom",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-size": 1,
+          },
+        });
+
+        const handlePinClick = (e: import("maplibre-gl").MapLayerMouseEvent) => {
           if (!map || !e.features || e.features.length === 0) return;
           const feature = e.features[0];
           if (!feature) return;
@@ -363,6 +397,7 @@ export function PlacesMap({ places, userCoords, className }: Props) {
             comuna: string;
             href: string;
             rating: number;
+            featured?: boolean;
           };
 
           new maplibregl.Popup({ offset: 18, closeButton: false, maxWidth: "240px" })
@@ -384,7 +419,10 @@ export function PlacesMap({ places, userCoords, className }: Props) {
                </div>`,
             )
             .addTo(map);
-        });
+        };
+
+        map.on("click", "pins-default", handlePinClick);
+        map.on("click", "pins-featured", handlePinClick);
 
         map.on("click", "clusters", async (e) => {
           if (!map || !e.features || e.features.length === 0) return;
@@ -408,7 +446,7 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           map.easeTo({ center: coords, zoom });
         });
 
-        for (const layer of ["pins", "clusters"]) {
+        for (const layer of ["pins-default", "pins-featured", "clusters"]) {
           map.on("mouseenter", layer, () => {
             if (map) map.getCanvas().style.cursor = "pointer";
           });
@@ -484,18 +522,25 @@ export function PlacesMap({ places, userCoords, className }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const features = buildFeatures(places);
+    const split = splitFeatures(buildFeatures(places));
     const apply = () => {
-      const source = map.getSource("places") as
+      const defaultSrc = map.getSource("places") as
         | import("maplibre-gl").GeoJSONSource
         | undefined;
-      if (!source) return;
-      source.setData({ type: "FeatureCollection", features });
+      const featuredSrc = map.getSource("places-featured") as
+        | import("maplibre-gl").GeoJSONSource
+        | undefined;
+      if (defaultSrc) {
+        defaultSrc.setData({ type: "FeatureCollection", features: split.default });
+      }
+      if (featuredSrc) {
+        featuredSrc.setData({ type: "FeatureCollection", features: split.featured });
+      }
     };
     if (sourceReadyRef.current) {
       apply();
     } else {
-      // El init aún no terminó de instalar la source. Esperamos al load del map.
+      // El init aún no terminó de instalar las sources. Esperamos al load.
       map.once("load", apply);
     }
   }, [places]);
