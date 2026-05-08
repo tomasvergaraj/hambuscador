@@ -412,7 +412,7 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-08 (sesión 4)**: Fases 0-4 cerradas + autocomplete de búsqueda, search del mapa con flyTo, search analytics. **MVP en producción** en `https://hambuscador.vercel.app`.
+**Estado al 2026-05-08 (sesión 5)**: Fases 0-4 cerradas + Fase 5 inicial (perfiles públicos /u/[username], reseñas compartibles /r/[id] con OG propio). Catálogo geo dinamizado a 16 regiones + 346 comunas oficiales de Chile. Ban retroactivo, autocomplete /buscar, descubrimiento de perfiles vía search. **Dominio `hambuscador.cl` comprado en NIC.cl con DNS en Cloudflare**, propagando a Vercel.
 
 ### Deploy actual
 
@@ -441,6 +441,9 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-07-hours-by-day-banned-cursor.sql` — `places.hours_by_day` jsonb, `users.banned_at` timestamptz, índice cursor `reviews_created_at_idx`. Ya en prod ✅.
 - `drizzle/2026-05-07-search-unaccent.sql` — `unaccent` extension, función IMMUTABLE `f_unaccent`, reindex GIN trigram en `f_unaccent(lower(name|comuna_label|specialty))`. Ya en prod ✅.
 - `drizzle/2026-05-08-search-logs.sql` — tabla `search_logs` con índices (normalized_query, created_at, partial zero-hit). Alimenta `/admin/search`. Ya en prod ✅.
+- `drizzle/2026-05-08-regions.sql` — tabla `regions(slug PK, label UNIQUE, lat, lng, zoom)` seedeada con las 16 regiones oficiales de Chile. ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-08-comunas.sql` — tabla `comunas(slug PK, label, region_slug FK, region_label, lat, lng)` seedeada con las 346 comunas oficiales (origen 2x3-la/geo-chile + reasignación Ñuble + Alhué + correcciones). ⏳ Pendiente aplicar en Neon prod (después de regions, hay FK).
+- `drizzle/2026-05-08-resync-aggregates.sql` — UPDATE one-shot que recalcula `places.rating_avg` y `review_count` excluyendo reseñas de baneados. Idempotente. ⏳ Pendiente aplicar en Neon prod (una vez después del deploy del ban retroactivo).
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
@@ -575,32 +578,82 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: `next/after()` (Next 15) corre callbacks después de mandar la respuesta. Ideal para fire-and-forget de logging/analytics sin bloquear TTFB.
 - ✅ Lección: cuando se agrega un campo nuevo a la búsqueda en `searchPlaces` (`region`), también hay que sumarlo al `scoreFor` (no solo al `matchClauseFor`) — sino los matches existen pero quedan en el fondo del orden.
 
+### Hecho en esta sesión (2026-05-08 sesión 5)
+
+#### Catálogo geo dinámico (regions + comunas)
+- ✅ Tabla `regions` con las 16 regiones oficiales (centroide + zoom). `getActiveRegions` filtra por presencia (≥1 place aprobado), defensive fallback a `REGIONS_REGISTRY` si la tabla aún no existe en el ambiente.
+- ✅ Tabla `comunas` con las 346 oficiales (slug PK, region_slug FK, region_label denormalizado, centroide). `getActiveComunas` (filter por presencia) + `getAllComunas` (las 346 para wizard).
+- ✅ Endpoint `/api/search/suggest` usa la fuente dinámica — cuando aporten un local en una comuna o región sin presencia previa, aparece automático en el dropdown.
+- ✅ Wizard `/agregar` reescrito: `<select>` de 12 → `<ComunaAutocomplete>` híbrido. Sin query → agrupa por región plegable (browse jerárquico). Con query → matches planos. Cero clicks extra para quien sabe el nombre.
+- ✅ Validación zod del action: `comunaSlug` ya no es enum, ahora `z.string()` validada en runtime contra `getAllComunas()`. `region` viene de `comuna.regionLabel` (alineado con tabla).
+
+#### Autocomplete dropdown en `/buscar?vista=lista`
+- ✅ `<LiveSearchInput>` suma dropdown sectionado (locales, regiones, comunas) manteniendo el filter live. Click en place navega a la ficha; comuna/región reemplazan `q` preservando filtros activos. Picás se omiten — la card "lista relacionada" inline ya cubre ese caso.
+
+#### Ban retroactivo en lecturas
+- ✅ `recomputePlaceAggregates` ahora INNER JOIN `users` con `banned_at IS NULL` — los rating excluyen reseñas de baneados.
+- ✅ `recomputePlacesForUser(userId)`: nueva fn, recalcula todos los places donde el user dejó reseñas. Disparada desde `banUser`/`unbanUser` (dynamic import para evitar circular dep).
+- ✅ `getReviewsByPlaceId`: `INNER JOIN users` con filter banned (oculto del listado público).
+- ✅ `/admin/moderacion`: pending de submitter baneado lleva tag tomate "creador baneado, revisa con cuidado".
+- ✅ Migration one-shot `2026-05-08-resync-aggregates.sql` para alinear el estado existente al cambio de comportamiento.
+
+#### Perfiles públicos /u/[username] (Fase 5)
+- ✅ Page `/u/[username]/page.tsx` con tabs (reseñas/favoritos/aportes aprobados), header con back, stats. 404 si username no existe o user está baneado (coherente con ban retroactivo).
+- ✅ `<UsernameSetter>` en `/perfil`: form para elegir/cambiar username (validación 3-30 chars `[a-z0-9_-]`, unicidad). Sin username el user es privado. Layout column en modo edit (evita flex-row bug).
+- ✅ `searchPublicUsers(query)`: filtra `username NOT NULL AND banned_at IS NULL`, match por @username o name, orden por reviewCount.
+- ✅ Search global suma sección "usuarios" en home/buscar/mapa dropdowns. Tipear "camila" o "@camila" encuentra el perfil.
+- ✅ `Review.authorUsername` nuevo campo (poblado desde `users.username`). Avatar + nombre en review cards de la ficha del local linkean a `/u/<username>` cuando hay username.
+- ✅ Atajo `/@username` → rewrite interno a `/u/<username>` (URL conserva `@`, estilo Twitter).
+
+#### Compartir reseñas /r/[id] con OG propio
+- ✅ Page `/r/[id]/page.tsx` permalink compartible: card grande de la reseña (rating, foto, texto, autor con link), CTA al local. noindex (las reseñas no son SEO-primario; el local sí).
+- ✅ `getReviewById(reviewId)`: lookup público con JOIN a place + user, filter banned author. Cache 60s tag `reviews`.
+- ✅ OG dinámica `/r/[id]/opengraph-image.tsx` — gradient mostaza, rating XL stars, snippet truncado del texto, autor pill con initials, nombre del local con comuna+región, brand. Pesa ~80-100 KB (sin foto, mantenemos < límite WhatsApp).
+- ✅ Botón share en cada review card de la ficha del local (mine y others) → lleva al `/r/[id]`.
+
+#### Deploy / dominio custom
+- 🟡 Dominio `hambuscador.cl` comprado en NIC.cl. DNS en Cloudflare (free tier) con nameservers actualizados en NIC. Records: `A @ 76.76.21.21` + `CNAME www cname.vercel-dns.com`, ambos **DNS only (gris, NO proxied)** — Vercel maneja SSL/CDN.
+- 🟡 Vercel Project → Domains → `hambuscador.cl` (canonical apex) + `www.hambuscador.cl` (redirect → apex).
+- 🟡 Custom domain R2: `photos.hambuscador.cl` conectado al bucket `hambuscador-photos`.
+
+#### DX
+- ✅ Commit por feature siempre, push al final del bloque (memoria persistida).
+- ✅ Lección: no usar `<details>` dentro de un padre `flex items-center` — el contenido expandido descentra el cross-axis. Toggle de state local + cambio a layout column es la solución limpia.
+- ✅ Lección: los 3 dropdowns (HomeSearchInput, LiveSearchInput, MapSearchInput) tienen lógica casi idéntica para keyboard nav + sections. Quedan como código duplicado por ahora — refactor a `<SuggestionsDropdown>` compartido cuando se agregue una 4ta sección o vuelvan a divergir las acciones.
+- ✅ Lección: pasar 28KB de comunas como prop al cliente (en `/agregar`) es totalmente válido. Filter client-side > server action por keystroke. Cuando el catálogo justifique server-search, cambiar entonces.
+
 ### Próximos pasos pendientes
 
-#### Deploy / infra
-1. **Comprar dominio `hambuscador.cl`** en NIC.cl. Después: agregar en Vercel → Domains, configurar DNS (`A @ 76.76.21.21`, `CNAME www cname.vercel-dns.com`), actualizar env vars `AUTH_URL` y `NEXT_PUBLIC_SITE_URL`, agregar redirect URI en Google OAuth, agregar origin en CORS de R2.
-2. **Custom domain en R2** → conectar `photos.hambuscador.cl` al bucket, actualizar `R2_PUBLIC_URL`.
-3. **Bootstrap admin REAL en prod**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = '...'` → cerrar sesión y reloguearse. (`seed-admin@hambuscador.cl` solo existe en dev.)
-4. **CORS R2 verificado**: si los uploads desde el navegador rebotan con CORS preflight, revisar que el bucket tenga la policy con `AllowedOrigins: ["http://localhost:3000", "https://hambuscador.vercel.app"]`, `AllowedMethods: ["PUT", "GET"]`, `AllowedHeaders: ["*"]`, `ExposeHeaders: ["ETag"]`.
-5. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
+#### Deploy / infra (post compra del dominio)
+1. **Aplicar migrations en Neon prod** (orden importa, hay FK):
+   - `drizzle/2026-05-08-regions.sql` (16 regiones)
+   - `drizzle/2026-05-08-comunas.sql` (346 comunas, FK regions)
+   - `drizzle/2026-05-08-resync-aggregates.sql` (one-shot, recalcula rating excluyendo baneados)
+2. **Esperar propagación DNS** y verificar Vercel Domains marca ambos dominios verdes.
+3. **Actualizar env vars en Vercel** y redeployar:
+   - `AUTH_URL=https://hambuscador.cl`
+   - `NEXT_PUBLIC_SITE_URL=https://hambuscador.cl`
+   - `R2_PUBLIC_URL=https://photos.hambuscador.cl`
+4. **Google OAuth** → agregar redirect URI `https://hambuscador.cl/api/auth/callback/google` (mantener el `*.vercel.app` también).
+5. **R2 CORS** → agregar `https://hambuscador.cl` a `AllowedOrigins` (junto al localhost y vercel.app).
+6. **Bootstrap admin REAL en prod**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = 'contacto@nexosoftware.cl'` → cerrar sesión y reloguearse.
+7. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
 
 #### Código
+1. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
+2. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
+3. **Más listas curadas en /picas** según crezca el catálogo: por comuna específica, por horario nocturno, por temática. Hardcoded por ahora; mover a tabla `picas_lists` con CRUD admin cuando se justifique.
+4. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
+5. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
+6. **Resync URLs de fotos viejas** (cuando se decida): después de mover a `photos.hambuscador.cl`, las fotos en DB (places.photos[], reviews.photos[]) siguen apuntando al `pub-...r2.dev`. Backwards-compat OK por ahora; cuando se justifique, script SQL de reescritura.
+7. **Profundizar perfil público**: bio editable, avatar custom (hoy solo initials), badge de "verificado" para owners reclamados.
 
-1. **Moderación retroactiva**: cuando se banea un usuario, sus reseñas existentes quedan visibles. Decidir si ocultarlas o mantenerlas (por ahora se mantienen — ban es preventivo).
-2. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
-3. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
-4. **Más listas curadas en /picas** según crezca el catálogo: por comuna específica, por horario nocturno, por temática. Hardcoded por ahora; mover a tabla `picas_lists` con CRUD admin cuando se justifique.
-5. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
-6. **Autocomplete en `/buscar` (LiveSearchInput)**: hoy el dropdown vive solo en home + mapa. En vista lista, los results live YA cubren places, pero todavía falta jump a comuna/región sin escribir. Evaluar si vale agregar (es duplicativo con la card "lista relacionada" inline + filtros).
-7. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
-8. **Más regiones en `REGIONS_REGISTRY`**: hoy solo RM + Valparaíso (las únicas con places). Cuando aporten desde Concepción/Antofagasta/etc., sumar al registry o derivar dinámicamente de los `places.region` distintos en DB.
-
-#### Fase 5 — engagement (nada empezado)
-
-- Sistema de favoritos público (perfil de otro usuario, ver sus favoritos)
-- Notificaciones push
-- Compartir reseñas (no solo locales)
-- Compartir vía deep links
+#### Fase 5 — engagement (parcialmente empezado)
+- ✅ Perfiles públicos `/u/[username]` con reseñas/favoritos/aportes
+- ✅ Compartir reseñas individuales `/r/[id]` con OG propio
+- ⏳ Notificaciones push (web + opcional email digest)
+- ⏳ Sistema de seguidores user → user
+- ⏳ Compartir vía deep links nativos (PWA share target)
 
 #### Optimización
 
