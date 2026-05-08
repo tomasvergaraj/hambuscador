@@ -123,6 +123,9 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
   // ~600 KB+ por sí solas, lo que nos saca del límite recomendado de WhatsApp
   // (<600 KB). El gradient comprime a ~80-150 KB con PNG.
   // La foto del local queda como protagonista en la ficha real (/[comuna]/[slug]).
+  //
+  // El logo SÍ se incrusta cuando existe — pesa poco (PNG cuadrado, miles de
+  // bytes vs cientos de KB de una foto) y aporta reconocimiento de marca.
   return new ImageResponse(
     (
       <div
@@ -145,7 +148,7 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
             background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
           }}
         >
-          <NoPhotoHero name={place.name} />
+          <Hero name={place.name} logoUrl={place.logo} />
 
           {/* Pill rating */}
           {place.rating > 0 && (
@@ -272,11 +275,12 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
 }
 
 // ============================================================================
-// Hero fallback cuando no hay foto: gradient mostaza con nombre BIG semi
-// transparente como marca de agua + 🍔 grande y patrón sutil de puntos.
+// Hero del OG — gradient mostaza con watermark del nombre. En el centro:
+//  - logo del local en card crema (cuando existe)
+//  - sino BrandIconSvg grande (placeholder de marca Hambuscador)
 // ============================================================================
 
-function NoPhotoHero({ name }: { name: string }) {
+function Hero({ name, logoUrl }: { name: string; logoUrl?: string }) {
   return (
     <div
       style={{
@@ -334,15 +338,40 @@ function NoPhotoHero({ name }: { name: string }) {
         {name}
       </div>
 
-      {/* Brand icon central grande (replicando el bun del logo) */}
-      <div
-        style={{
-          display: "flex",
-          filter: "drop-shadow(0 8px 24px rgba(31, 27, 23, 0.35))",
-        }}
-      >
-        <BrandIconSvg size={220} />
-      </div>
+      {/* Centro: logo del local en card si existe, sino brand icon */}
+      {logoUrl ? (
+        <div
+          style={{
+            display: "flex",
+            width: 260,
+            height: 260,
+            background: CREMA_DEEP,
+            borderRadius: 28,
+            padding: 28,
+            alignItems: "center",
+            justifyContent: "center",
+            filter: "drop-shadow(0 8px 24px rgba(31, 27, 23, 0.4))",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt={name}
+            width={204}
+            height={204}
+            style={{ objectFit: "contain", width: 204, height: 204 }}
+          />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            filter: "drop-shadow(0 8px 24px rgba(31, 27, 23, 0.35))",
+          }}
+        >
+          <BrandIconSvg size={220} />
+        </div>
+      )}
 
       {/* Tira inferior tipo cinta carbon */}
       <div
