@@ -48,6 +48,9 @@ export type Review = {
   authorId: string;
   authorName: string;
   authorInitials: string;
+  /** Username público del autor para linkear a `/u/<username>`. null si el
+   * autor todavía no eligió uno. */
+  authorUsername: string | null;
   rating: number; // 1..5
   ratingsByAspect: Record<ReviewAspectId, number>;
   text: string | null;

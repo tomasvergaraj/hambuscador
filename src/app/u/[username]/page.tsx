@@ -2,33 +2,30 @@ import {
   IconBuildingStore,
   IconChevronRight,
   IconHeart,
-  IconLogout,
   IconStar,
 } from "@tabler/icons-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
-import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
-import { auth } from "@/server/auth";
 import {
   getMyFavorites,
   getMyReviews,
   getMySubmissions,
-  getUserById,
+  getUserByUsername,
   getUserStats,
   type MyFavoriteItem,
   type MyReviewItem,
   type MySubmissionItem,
 } from "@/server/services/users";
-import { signOutAction } from "./actions";
-import { UsernameSetter } from "./username-setter";
 
-export const metadata = {
-  title: "mi perfil",
-};
+// ============================================================================
+// Perfil público de un usuario por username. 404 si no existe el username, si
+// el usuario no tiene username seteado, o si está baneado (handled in svc).
+// Sin sesión también es accesible — engagement Fase 5.
+// ============================================================================
 
 const TABS = ["resenas", "favoritos", "aportes"] as const;
 type Tab = (typeof TABS)[number];
@@ -39,84 +36,81 @@ const TAB_LABEL: Record<Tab, string> = {
   aportes: "aportes",
 };
 
-type SearchParams = { nuevo?: string; tab?: string };
+type SearchParams = { tab?: string };
 
 function parseTab(value: string | undefined): Tab {
   return TABS.find((t) => t === value) ?? "resenas";
 }
 
-/**
- * Perfil del usuario logueado. Si no hay sesión redirige a `/iniciar-sesion`.
- * Lee `?nuevo=1` (viene del redirect de `/agregar`) para mostrar un banner
- * de confirmación. `?tab=resenas|favoritos|aportes` controla qué lista se
- * renderiza.
- */
-export default async function PerfilPage({
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}) {
+  const { username } = await params;
+  const user = await getUserByUsername(username.toLowerCase());
+  if (!user) return { title: "perfil no encontrado" };
+  const name = user.name ?? `@${user.username}`;
+  return {
+    title: `${name} en hambuscador`,
+    description: `Reseñas, favoritos y aportes de ${name} en hambuscador.`,
+  };
+}
+
+export default async function UserProfilePage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ username: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/iniciar-sesion");
-  }
-
-  const { nuevo, tab: tabParam } = await searchParams;
-  const tab = parseTab(tabParam);
-  const userId = session.user.id;
-
-  // Pedimos stats + user (para username) + la lista de la tab activa
-  const [stats, dbUser, list] = await Promise.all([
-    getUserStats(userId),
-    getUserById(userId),
-    tab === "resenas"
-      ? getMyReviews(userId)
-      : tab === "favoritos"
-        ? getMyFavorites(userId)
-        : getMySubmissions(userId),
+  const [{ username: rawUsername }, { tab: tabParam }] = await Promise.all([
+    params,
+    searchParams,
   ]);
 
-  const showSubmittedBanner = nuevo === "1";
+  const username = rawUsername.toLowerCase();
+  const user = await getUserByUsername(username);
+  if (!user) notFound();
 
-  const name = session.user.name ?? "tú";
-  const email = session.user.email ?? "";
-  const initials = initialsFromName(name);
+  const tab = parseTab(tabParam);
+
+  // Approved-only para no exponer pending/rejected ajenos.
+  const [stats, list] = await Promise.all([
+    getUserStats(user.id, { approvedOnly: true }),
+    tab === "resenas"
+      ? getMyReviews(user.id)
+      : tab === "favoritos"
+        ? getMyFavorites(user.id)
+        : getMySubmissions(user.id, { approvedOnly: true }),
+  ]);
+
+  const displayName = user.name ?? `@${user.username}`;
+  const initials = initialsFromName(displayName);
+  const memberSince = formatMemberSince(user.createdAt);
 
   return (
     <div className="flex flex-col min-h-screen pb-24">
-      <Header title="mi perfil" />
+      <Header title={`@${user.username}`} backHref="/" />
 
       <main className="px-4 pt-4 flex-1 flex flex-col gap-4">
-        {showSubmittedBanner ? (
-          <div
-            role="status"
-            className="rounded-md bg-mostaza/15 border border-mostaza/40 px-3 py-3"
-          >
-            <p className="text-sm font-display font-semibold text-carbon">
-              ¡filete! tu picá está en revisión
-            </p>
-            <p className="text-xs text-tinta-suave mt-0.5 leading-relaxed">
-              te avisamos cuando se apruebe y aparezca en el directorio.
-            </p>
-          </div>
-        ) : null}
-
-        {/* Tarjeta de identidad */}
         <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex items-center gap-3">
           <div className="w-14 h-14 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center font-display font-semibold text-lg">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-display font-semibold text-base text-carbon truncate">{name}</p>
-            {email ? (
-              <p className="text-xs text-tinta-suave truncate">{email}</p>
+            <p className="font-display font-semibold text-base text-carbon truncate">
+              {displayName}
+            </p>
+            <p className="text-xs text-tinta-suave">miembro desde {memberSince}</p>
+            {user.bio ? (
+              <p className="text-xs text-tinta-suave mt-1 line-clamp-2 leading-relaxed">
+                {user.bio}
+              </p>
             ) : null}
           </div>
         </section>
 
-        <UsernameSetter currentUsername={dbUser?.username ?? null} />
-
-        {/* Stats */}
         <section aria-label="actividad">
           <div className="grid grid-cols-3 gap-2">
             <StatCard
@@ -137,12 +131,11 @@ export default async function PerfilPage({
           </div>
         </section>
 
-        {/* Tabs */}
         <nav aria-label="cambiar lista" className="flex gap-2">
           {TABS.map((t) => (
             <Link
               key={t}
-              href={`/perfil?tab=${t}`}
+              href={`/u/${user.username}?tab=${t}`}
               scroll={false}
               aria-current={t === tab ? "page" : undefined}
               className={cn(
@@ -157,26 +150,17 @@ export default async function PerfilPage({
           ))}
         </nav>
 
-        {/* Lista de la tab activa */}
         <section aria-label={TAB_LABEL[tab]}>
           {tab === "resenas" && (
-            <ReviewsList items={list as MyReviewItem[]} />
+            <ReviewsList items={list as MyReviewItem[]} name={displayName} />
           )}
           {tab === "favoritos" && (
-            <FavoritesList items={list as MyFavoriteItem[]} />
+            <FavoritesList items={list as MyFavoriteItem[]} name={displayName} />
           )}
           {tab === "aportes" && (
-            <SubmissionsList items={list as MySubmissionItem[]} />
+            <SubmissionsList items={list as MySubmissionItem[]} name={displayName} />
           )}
         </section>
-
-        <div className="flex-1" />
-
-        <form action={signOutAction}>
-          <Button variant="secondary" size="lg" fullWidth type="submit">
-            <IconLogout size={18} aria-hidden="true" /> cerrar sesión
-          </Button>
-        </form>
       </main>
 
       <BottomNav />
@@ -185,7 +169,7 @@ export default async function PerfilPage({
 }
 
 // ============================================================================
-// Sub-componentes (server, sin estado)
+// Sub-componentes
 // ============================================================================
 
 function StatCard({
@@ -206,30 +190,17 @@ function StatCard({
   );
 }
 
-function EmptyState({ message, cta }: { message: string; cta?: { href: string; label: string } }) {
+function EmptyState({ message }: { message: string }) {
   return (
     <div className="bg-crema-deep border border-crema-edge rounded-lg px-4 py-8 text-center">
       <p className="text-sm text-tinta-suave">{message}</p>
-      {cta ? (
-        <Link
-          href={cta.href}
-          className="inline-block mt-3 text-xs font-medium text-tomate hover:opacity-80"
-        >
-          {cta.label} →
-        </Link>
-      ) : null}
     </div>
   );
 }
 
-function ReviewsList({ items }: { items: MyReviewItem[] }) {
+function ReviewsList({ items, name }: { items: MyReviewItem[]; name: string }) {
   if (items.length === 0) {
-    return (
-      <EmptyState
-        message="aún no calificas ninguna picá."
-        cta={{ href: "/buscar", label: "buscar dónde comer" }}
-      />
-    );
+    return <EmptyState message={`${name} aún no califica picás.`} />;
   }
   return (
     <ul className="flex flex-col gap-2">
@@ -265,14 +236,9 @@ function ReviewsList({ items }: { items: MyReviewItem[] }) {
   );
 }
 
-function FavoritesList({ items }: { items: MyFavoriteItem[] }) {
+function FavoritesList({ items, name }: { items: MyFavoriteItem[]; name: string }) {
   if (items.length === 0) {
-    return (
-      <EmptyState
-        message="aún no guardas picás favoritas."
-        cta={{ href: "/buscar", label: "explorar locales" }}
-      />
-    );
+    return <EmptyState message={`${name} aún no guarda favoritos.`} />;
   }
   return (
     <ul className="flex flex-col gap-2">
@@ -303,70 +269,41 @@ function FavoritesList({ items }: { items: MyFavoriteItem[] }) {
   );
 }
 
-function SubmissionsList({ items }: { items: MySubmissionItem[] }) {
+function SubmissionsList({
+  items,
+  name,
+}: {
+  items: MySubmissionItem[];
+  name: string;
+}) {
   if (items.length === 0) {
-    return (
-      <EmptyState
-        message="aún no aportas picás al directorio."
-        cta={{ href: "/agregar", label: "agregar una picá" }}
-      />
-    );
+    return <EmptyState message={`${name} aún no aporta picás.`} />;
   }
   return (
     <ul className="flex flex-col gap-2">
-      {items.map((s) => {
-        // Solo los aprobados son páginas públicas; los pending/rejected no linkean.
-        const inner = (
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-carbon truncate">{s.name}</p>
-              <p className="text-[10px] text-bronceado">
-                {s.comunaLabel} · hace {daysSince(s.createdAt)}
-              </p>
-            </div>
-            <SubmissionBadge status={s.moderationStatus} />
-          </div>
-        );
-        return (
-          <li key={s.id}>
-            {s.moderationStatus === "approved" ? (
-              <Link
-                href={`/${s.comunaSlug}/${s.slug}`}
-                className="block bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md"
-              >
-                {inner}
-              </Link>
-            ) : (
-              <div className="bg-crema-deep border border-crema-edge rounded-lg p-3">
-                {inner}
+      {items.map((s) => (
+        <li key={s.id}>
+          <Link
+            href={`/${s.comunaSlug}/${s.slug}`}
+            className="block bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.97] hover:shadow-md"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-carbon truncate">{s.name}</p>
+                <p className="text-[10px] text-bronceado">
+                  {s.comunaLabel} · hace {daysSince(s.createdAt)}
+                </p>
               </div>
-            )}
-          </li>
-        );
-      })}
+              <IconChevronRight
+                size={16}
+                className="text-bronceado shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+            </div>
+          </Link>
+        </li>
+      ))}
     </ul>
-  );
-}
-
-function SubmissionBadge({ status }: { status: MySubmissionItem["moderationStatus"] }) {
-  if (status === "approved") {
-    return (
-      <span className="text-[9px] font-medium tracking-wider text-lechuga bg-lechuga/10 px-1.5 py-0.5 rounded uppercase shrink-0">
-        aprobado
-      </span>
-    );
-  }
-  if (status === "rejected") {
-    return (
-      <span className="text-[9px] font-medium tracking-wider text-tomate bg-tomate/10 px-1.5 py-0.5 rounded uppercase shrink-0">
-        rechazado
-      </span>
-    );
-  }
-  return (
-    <span className="text-[9px] font-medium tracking-wider text-mostaza-deep bg-mostaza/15 px-1.5 py-0.5 rounded uppercase shrink-0">
-      en revisión
-    </span>
   );
 }
 
@@ -382,4 +319,11 @@ function daysSince(date: Date): string {
   if (days < 30) return `${Math.floor(days / 7)} semanas`;
   if (days < 365) return `${Math.floor(days / 30)} meses`;
   return `${Math.floor(days / 365)} años`;
+}
+
+function formatMemberSince(date: Date): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
 }

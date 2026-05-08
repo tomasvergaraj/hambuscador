@@ -76,6 +76,62 @@ export async function getUserById(id: string): Promise<DbUser | null> {
   return row ?? null;
 }
 
+/**
+ * Lookup por username público. Excluye baneados (coherente con el ban
+ * retroactivo en lecturas públicas). Para `/u/[username]`.
+ */
+export async function getUserByUsername(username: string): Promise<DbUser | null> {
+  if (!isDbConfigured()) return null;
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1);
+  if (!row || row.bannedAt) return null;
+  return row;
+}
+
+export class UsernameTakenError extends Error {
+  constructor(username: string) {
+    super(`@${username} ya está en uso`);
+    this.name = "UsernameTakenError";
+  }
+}
+
+const USERNAME_REGEX = /^[a-z0-9_-]+$/;
+
+/**
+ * Setea o actualiza el username público del usuario. Valida formato (ASCII
+ * lowercase, 3-30 chars, _ y - permitidos) y unicidad. El username habilita
+ * `/u/<username>` como perfil público; sin username, el usuario es privado.
+ */
+export async function setUsername(userId: string, raw: string): Promise<void> {
+  if (!isDbConfigured()) throw new Error("setUsername requiere DATABASE_URL");
+  const username = raw.trim().toLowerCase();
+  if (username.length < 3 || username.length > 30) {
+    throw new Error("El username debe tener entre 3 y 30 caracteres");
+  }
+  if (!USERNAME_REGEX.test(username)) {
+    throw new Error("Solo letras a-z, números, _ y -");
+  }
+
+  const db = getDb();
+  const [taken] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1);
+  if (taken && taken.id !== userId) {
+    throw new UsernameTakenError(username);
+  }
+
+  await db
+    .update(users)
+    .set({ username, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
 export type UserStats = {
   reviewCount: number;
   favoriteCount: number;
@@ -84,17 +140,26 @@ export type UserStats = {
 
 /**
  * Conteos para el perfil. `reviewCount` viene del contador denormalizado;
- * `favoriteCount` y `placeCount` se calculan con count(*).
+ * `favoriteCount` y `placeCount` se calculan con count(*). Con
+ * `approvedOnly: true` el `placeCount` cuenta solo aportes aprobados —
+ * usado por `/u/[username]` para no exponer pending/rejected ajenos.
  *
  * En modo demo retorna ceros — la page de perfil ya redirige a login antes
  * de llegar acá, así que es solo defensivo.
  */
-export async function getUserStats(userId: string): Promise<UserStats> {
+export async function getUserStats(
+  userId: string,
+  opts?: { approvedOnly?: boolean },
+): Promise<UserStats> {
   if (!isDbConfigured()) {
     return { reviewCount: 0, favoriteCount: 0, placeCount: 0 };
   }
 
   const db = getDb();
+  const placesFilter = opts?.approvedOnly
+    ? sql`${places.submittedBy} = ${userId} AND ${places.moderationStatus} = 'approved'`
+    : eq(places.submittedBy, userId);
+
   const [userRow, favRow, placeRow] = await Promise.all([
     db
       .select({ reviewCount: users.reviewCount })
@@ -105,10 +170,7 @@ export async function getUserStats(userId: string): Promise<UserStats> {
       .select({ count: count() })
       .from(favorites)
       .where(eq(favorites.userId, userId)),
-    db
-      .select({ count: count() })
-      .from(places)
-      .where(eq(places.submittedBy, userId)),
+    db.select({ count: count() }).from(places).where(placesFilter),
   ]);
 
   return {
@@ -235,12 +297,21 @@ export async function getMyFavorites(userId: string): Promise<MyFavoriteItem[]> 
 }
 
 /**
- * Locales que el usuario aportó (todos los estados de moderación).
+ * Locales que el usuario aportó. Por defecto todos los estados de moderación
+ * (para `/perfil` propio). Con `approvedOnly: true` solo aprobados — usado
+ * por el perfil público `/u/[username]`, donde pending/rejected son privados.
  */
-export async function getMySubmissions(userId: string): Promise<MySubmissionItem[]> {
+export async function getMySubmissions(
+  userId: string,
+  opts?: { approvedOnly?: boolean },
+): Promise<MySubmissionItem[]> {
   if (!isDbConfigured()) return [];
 
   const db = getDb();
+  const filter = opts?.approvedOnly
+    ? sql`${places.submittedBy} = ${userId} AND ${places.moderationStatus} = 'approved'`
+    : eq(places.submittedBy, userId);
+
   const rows = await db
     .select({
       id: places.id,
@@ -252,7 +323,7 @@ export async function getMySubmissions(userId: string): Promise<MySubmissionItem
       createdAt: places.createdAt,
     })
     .from(places)
-    .where(eq(places.submittedBy, userId))
+    .where(filter)
     .orderBy(desc(places.createdAt));
 
   return rows;

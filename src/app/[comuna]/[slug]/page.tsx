@@ -301,7 +301,18 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                       {review.authorInitials}
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-carbon">{review.authorName}</p>
+                      {review.authorUsername ? (
+                        <Link
+                          href={`/u/${review.authorUsername}`}
+                          className="text-xs font-medium text-carbon hover:text-mostaza-deep transition-colors"
+                        >
+                          {review.authorName}
+                        </Link>
+                      ) : (
+                        <p className="text-xs font-medium text-carbon">
+                          {review.authorName}
+                        </p>
+                      )}
                       <p className="text-[10px] text-bronceado">
                         {"★".repeat(review.rating)} · hace {daysSince(review.createdAt)}
                       </p>

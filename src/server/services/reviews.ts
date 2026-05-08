@@ -13,6 +13,7 @@ import { recomputePlaceAggregates } from "./places";
 type DbReviewWithAuthor = DbReview & {
   authorName: string | null;
   authorImage: string | null;
+  authorUsername: string | null;
 };
 
 function dbReviewToUi(row: DbReviewWithAuthor): Review {
@@ -24,6 +25,7 @@ function dbReviewToUi(row: DbReviewWithAuthor): Review {
     authorId: row.authorId,
     authorName: name,
     authorInitials: initials,
+    authorUsername: row.authorUsername,
     rating: row.rating,
     ratingsByAspect: {
       comida: row.aspectComida ?? row.rating,
@@ -82,6 +84,7 @@ export async function getReviewsByPlaceId(
       updatedAt: reviews.updatedAt,
       authorName: users.name,
       authorImage: users.image,
+      authorUsername: users.username,
     })
     .from(reviews)
     .innerJoin(users, eq(reviews.authorId, users.id))
