@@ -122,6 +122,11 @@ async function searchText(
       languageCode: "es",
       regionCode: "CL",
       maxResultCount: 20,
+      // includedType filtra server-side a la primary type "hamburger_restaurant"
+      // — sin esto, "hamburguesería en X" devuelve cualquier resto cercano que
+      // mencione algo similar (pizza, sushi, café). Con esto, ~95% son burger.
+      includedType: "hamburger_restaurant",
+      strictTypeFiltering: true,
     };
     if (pageToken) body.pageToken = pageToken;
 
@@ -229,6 +234,7 @@ async function main() {
   let totalSkippedDup = 0;
   let totalSkippedClosed = 0;
   let totalSkippedInvalid = 0;
+  let totalSkippedWrongComuna = 0;
   let totalRequests = 0;
 
   for (const comuna of comunas) {
@@ -260,6 +266,23 @@ async function main() {
       }
       if (g.businessStatus === "CLOSED_PERMANENTLY") {
         totalSkippedClosed += 1;
+        continue;
+      }
+
+      // Verificación de comuna: Google text search puede devolver places
+      // de comunas vecinas (ej. Viña del Mar cuando la query es Concón).
+      // Filtramos por presencia del label de la comuna en la dirección
+      // formateada (case + accent insensitive).
+      const address = (g.shortFormattedAddress ?? g.formattedAddress ?? "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "");
+      const comunaNorm = comuna.label
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "");
+      if (!address.includes(comunaNorm)) {
+        totalSkippedWrongComuna += 1;
         continue;
       }
 
@@ -316,12 +339,13 @@ async function main() {
   }
 
   console.log("\n=== Resumen ===");
-  console.log(`  Encontrados:        ${totalFound}`);
-  console.log(`  Insertados:         ${totalInserted}${dryRun ? " (dry-run, no escribió)" : ""}`);
-  console.log(`  Skip (duplicados):  ${totalSkippedDup}`);
-  console.log(`  Skip (cerrados):    ${totalSkippedClosed}`);
-  console.log(`  Skip (sin coords):  ${totalSkippedInvalid}`);
-  console.log(`  Requests Google:    ${totalRequests} → ~USD ${(totalRequests * 0.035).toFixed(3)}`);
+  console.log(`  Encontrados:           ${totalFound}`);
+  console.log(`  Insertados:            ${totalInserted}${dryRun ? " (dry-run, no escribió)" : ""}`);
+  console.log(`  Skip (duplicados):     ${totalSkippedDup}`);
+  console.log(`  Skip (cerrados):       ${totalSkippedClosed}`);
+  console.log(`  Skip (sin coords):     ${totalSkippedInvalid}`);
+  console.log(`  Skip (otra comuna):    ${totalSkippedWrongComuna}`);
+  console.log(`  Requests Google:       ${totalRequests} → ~USD ${(totalRequests * 0.035).toFixed(3)}`);
 
   await closeDb();
 }
