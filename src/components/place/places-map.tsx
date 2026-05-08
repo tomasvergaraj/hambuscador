@@ -13,7 +13,15 @@ import type { Place } from "@/types/place";
 
 type Feature = {
   type: "Feature";
-  properties: { id: string; name: string; comuna: string; href: string; rating: number };
+  properties: {
+    id: string;
+    name: string;
+    comuna: string;
+    href: string;
+    rating: number;
+    /** Locales con publicidad activa. Render con pin tomate + glow ring. */
+    featured: boolean;
+  };
   geometry: { type: "Point"; coordinates: [number, number] };
 };
 
@@ -28,9 +36,53 @@ function buildFeatures(places: Place[]): Feature[] {
         comuna: p.comunaLabel,
         href: `/${p.comuna}/${p.slug}`,
         rating: p.rating,
+        featured: p.isFeatured,
       },
       geometry: { type: "Point" as const, coordinates: [p.coords.lng, p.coords.lat] },
     }));
+}
+
+// ============================================================================
+// Pin icons — burger en teardrop. Dos variantes:
+//   - default: borde carbon, fondo mostaza. Pin standard.
+//   - featured: borde tomate + glow ring. Locales con publicidad activa
+//     (places.is_featured). Tamaño un poco mayor para destacar.
+// SVG inline → data URL → HTMLImageElement → map.addImage con pixelRatio 2
+// para que se vea nítido en retina.
+// ============================================================================
+
+const BURGER_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="104" viewBox="0 0 40 52">
+  <path d="M20 2 C9.5 2 2 9.5 2 20 C2 30 12 42 20 50 C28 42 38 30 38 20 C38 9.5 30.5 2 20 2 Z" fill="#E8A02C" stroke="#1F1B17" stroke-width="2"/>
+  <circle cx="20" cy="20" r="11.5" fill="#FAF6EE"/>
+  <path d="M11 16 C11 12.5 14.5 10.5 20 10.5 C25.5 10.5 29 12.5 29 16 Z" fill="#E8A02C"/>
+  <ellipse cx="16" cy="13.5" rx="0.5" ry="0.7" fill="#FAF6EE"/>
+  <ellipse cx="20" cy="12" rx="0.5" ry="0.7" fill="#FAF6EE"/>
+  <ellipse cx="24" cy="13.5" rx="0.5" ry="0.7" fill="#FAF6EE"/>
+  <path d="M11 17.5 L29 17.5 L29 18.5 Q26.5 19.5 23.5 18.5 Q20.5 19.5 17.5 18.5 Q14.5 19.5 11 18.5 Z" fill="#6B8E4E"/>
+  <rect x="11" y="20" width="18" height="2.6" rx="0.5" fill="#3E2723"/>
+  <path d="M11 23 L29 23 L29 25.2 C29 26.8 25 27.5 20 27.5 C15 27.5 11 26.8 11 25.2 Z" fill="#C8862A"/>
+</svg>`;
+
+const BURGER_PIN_FEATURED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="120" viewBox="0 0 48 60">
+  <circle cx="24" cy="24" r="22" fill="#C84B31" opacity="0.22"/>
+  <path d="M24 4 C12 4 4 12 4 23 C4 35 16 49 24 57 C32 49 44 35 44 23 C44 12 36 4 24 4 Z" fill="#E8A02C" stroke="#C84B31" stroke-width="3"/>
+  <circle cx="24" cy="22" r="13" fill="#FAF6EE"/>
+  <path d="M14 18 C14 14 18 11.5 24 11.5 C30 11.5 34 14 34 18 Z" fill="#E8A02C"/>
+  <ellipse cx="19" cy="15" rx="0.6" ry="0.8" fill="#FAF6EE"/>
+  <ellipse cx="24" cy="13.5" rx="0.6" ry="0.8" fill="#FAF6EE"/>
+  <ellipse cx="29" cy="15" rx="0.6" ry="0.8" fill="#FAF6EE"/>
+  <path d="M14 19 L34 19 L34 20.2 Q31 21.5 27.5 20.2 Q24 21.5 20.5 20.2 Q17 21.5 14 20.2 Z" fill="#6B8E4E"/>
+  <rect x="14" y="22" width="20" height="3" rx="0.6" fill="#3E2723"/>
+  <path d="M14 25.5 L34 25.5 L34 28 C34 29.8 30 30.5 24 30.5 C18 30.5 14 29.8 14 28 Z" fill="#C8862A"/>
+</svg>`;
+
+function loadSvgImage(svg: string, w: number, h: number): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image(w, h);
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("svg image load failed"));
+    img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  });
 }
 
 // ============================================================================
@@ -203,12 +255,30 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           .addTo(map);
       }
 
-      map.on("load", () => {
+      map.on("load", async () => {
         if (!map) return;
 
         // Forzamos resize cuando el style termina de cargar — defensivo
         // contra container size pendiente de aplicarse.
         map.resize();
+
+        // Cargamos los SVG de pin ANTES del addLayer del symbol — sino la
+        // capa se renderiza vacía hasta que las imágenes existan.
+        try {
+          const [pin, pinFeatured] = await Promise.all([
+            loadSvgImage(BURGER_PIN_SVG, 80, 104),
+            loadSvgImage(BURGER_PIN_FEATURED_SVG, 96, 120),
+          ]);
+          if (!map.hasImage("burger-pin")) {
+            map.addImage("burger-pin", pin, { pixelRatio: 2 });
+          }
+          if (!map.hasImage("burger-pin-featured")) {
+            map.addImage("burger-pin-featured", pinFeatured, { pixelRatio: 2 });
+          }
+        } catch {
+          // Si falla la carga (CSP rara), seguimos — MapLibre dibuja un
+          // missing-image placeholder pequeño y el mapa sigue usable.
+        }
 
         map.addSource("places", {
           type: "geojson",
@@ -261,14 +331,22 @@ export function PlacesMap({ places, userCoords, className }: Props) {
 
         map.addLayer({
           id: "pins",
-          type: "circle",
+          type: "symbol",
           source: "places",
           filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-color": "#E8A02C",
-            "circle-radius": 10,
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#1F1B17",
+          layout: {
+            "icon-image": [
+              "case",
+              ["get", "featured"],
+              "burger-pin-featured",
+              "burger-pin",
+            ],
+            "icon-anchor": "bottom",
+            // Permitimos overlap así no desaparecen pins en zooms bajos —
+            // mejor superpuestos que ausentes (hay popup para desambiguar).
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-size": 1,
           },
         });
 
