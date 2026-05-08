@@ -4,11 +4,15 @@ import Link from "next/link";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { LiveSearchInput } from "@/components/place/live-search-input";
+import { MapSearchInput } from "@/components/place/map-search-input";
+import { PicaIcon } from "@/components/place/pica-icon";
 import { PlaceCard } from "@/components/place/place-card";
 import { PlacesMap } from "@/components/place/places-map";
 import { SearchFilters } from "@/components/place/search-filters";
 import { searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
+import { PICAS_LISTS, type PicasList } from "@/lib/picas";
+import { normalizeForSearch } from "@/lib/search";
 
 type SearchParams = {
   q?: string;
@@ -57,6 +61,11 @@ export default async function BuscarPage({
     userCoords: effectiveSort === "distance" ? (userCoords ?? undefined) : undefined,
   });
 
+  // ¿La query matchea una lista curada? Si es así, mostramos un atajo arriba
+  // de los resultados — útil para que el usuario salte a la curaduría editorial
+  // en lugar de filtrar a mano. Solo desde 3 chars para evitar matches ruidosos.
+  const relatedPica = findRelatedPica(query);
+
   // Agrupación: solo cuando no hay query ni filtros ni sort explícito.
   // Con coords → bandas de distancia; sin coords → por comuna.
   const hasFilters =
@@ -90,10 +99,10 @@ export default async function BuscarPage({
               <IconArrowLeft size={18} />
             </Link>
             <div className="flex-1">
-              <LiveSearchInput
+              <MapSearchInput
                 initialValue={query}
                 size="md"
-                placeholder="busca por barrio o nombre"
+                placeholder="busca región, comuna o local"
               />
             </div>
           </header>
@@ -175,6 +184,33 @@ export default async function BuscarPage({
         <SearchFilters hasUserCoords={Boolean(userCoords)} resultsCount={results.length} />
       </section>
 
+      {relatedPica && (
+        <section className="px-4 pb-3">
+          <Link
+            href={`/picas/${relatedPica.slug}`}
+            className="block bg-mostaza/10 border border-mostaza/30 rounded-2xl px-3 py-3 transition-[transform,colors] duration-150 active:scale-[0.99] hover:bg-mostaza/15"
+          >
+            <div className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-xl bg-mostaza/20 inline-flex items-center justify-center text-mostaza shrink-0">
+                <PicaIcon name={relatedPica.icon} size={18} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-bronceado font-medium">
+                  lista relacionada
+                </p>
+                <p className="font-display font-semibold text-sm text-carbon truncate">
+                  {relatedPica.title}
+                </p>
+                <p className="text-[11px] text-tinta-suave truncate">
+                  {relatedPica.hook}
+                </p>
+              </div>
+              <span className="text-mostaza font-medium text-sm shrink-0">ver →</span>
+            </div>
+          </Link>
+        </section>
+      )}
+
       {usedFuzzy && query && (
         <section className="px-4 pb-2">
           <div className="rounded-xl bg-mostaza/10 border border-mostaza/30 px-3 py-2 text-xs text-carbon">
@@ -242,6 +278,21 @@ function EmptyState({ query, hasFilters }: { query: string; hasFilters: boolean 
         </Link>
       </div>
     </div>
+  );
+}
+
+/**
+ * Busca la primera lista curada cuyo title o hook contiene la query (normalizada
+ * accent/case). Mínimo 3 chars para evitar que "el" o "la" matcheen cualquier cosa.
+ */
+function findRelatedPica(query: string): PicasList | undefined {
+  const trimmed = query.trim();
+  if (trimmed.length < 3) return undefined;
+  const norm = normalizeForSearch(trimmed);
+  return PICAS_LISTS.find(
+    (l) =>
+      normalizeForSearch(l.title).includes(norm) ||
+      normalizeForSearch(l.hook).includes(norm),
   );
 }
 

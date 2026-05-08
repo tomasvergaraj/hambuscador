@@ -168,11 +168,11 @@ export type SearchResult = {
  *   1. `tokenizeQuery` baja a ASCII lowercase, separa tokens, descarta stop
  *      words ("de la y en…") y expande sinónimos (veggie → vegetariana, etc).
  *   2. WHERE: cada token tiene que matchear AL MENOS un campo
- *      (name / cuisines / specialty / comuna_label / address). AND entre tokens.
- *      "smash providencia" exige BOTH smash AND providencia presentes.
+ *      (name / cuisines / specialty / comuna_label / region / address).
+ *      AND entre tokens. "smash providencia" exige BOTH smash AND providencia.
  *   3. SCORE por fila = sumatoria sobre tokens de `max field weight matched`:
- *      prefix-name=5, name=3, cuisine=2, specialty=1.5, comuna=1, address=0.5.
- *      Bonus +5 si el `phrase` completo está como substring del nombre.
+ *      prefix-name=5, name=3, cuisine=2, specialty=1.5, comuna=1, region=0.7,
+ *      address=0.5. Bonus +5 si el `phrase` completo está como substring del nombre.
  *   4. TIEBREAK: bayesian rating (suaviza outliers de 5★ con 1 reseña),
  *      después distancia si hay coords, después rating raw.
  *
@@ -316,6 +316,7 @@ export async function searchPlaces(opts: {
       return sql`(
         f_unaccent(lower(${places.name})) LIKE ${like} OR
         f_unaccent(lower(${places.comunaLabel})) LIKE ${like} OR
+        f_unaccent(lower(${places.region})) LIKE ${like} OR
         f_unaccent(lower(COALESCE(${places.specialty}, ''))) LIKE ${like} OR
         f_unaccent(lower(${places.address})) LIKE ${like} OR
         EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE f_unaccent(lower(c)) LIKE ${like})
@@ -341,6 +342,7 @@ export async function searchPlaces(opts: {
         CASE WHEN EXISTS (SELECT 1 FROM unnest(${places.cuisines}) c WHERE f_unaccent(lower(c)) LIKE ${like}) THEN 2.0 ELSE 0 END,
         CASE WHEN f_unaccent(lower(COALESCE(${places.specialty}, ''))) LIKE ${like} THEN 1.5 ELSE 0 END,
         CASE WHEN f_unaccent(lower(${places.comunaLabel})) LIKE ${like} THEN 1.0 ELSE 0 END,
+        CASE WHEN f_unaccent(lower(${places.region})) LIKE ${like} THEN 0.7 ELSE 0 END,
         CASE WHEN f_unaccent(lower(${places.address})) LIKE ${like} THEN 0.5 ELSE 0 END
       )`;
     };

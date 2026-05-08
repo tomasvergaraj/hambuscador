@@ -5,6 +5,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { IconCurrentLocation } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 
+import {
+  FLY_TO_EVENT,
+  type FlyToDetail,
+} from "@/components/place/map-search-input";
 import type { Place } from "@/types/place";
 
 type Feature = {
@@ -369,6 +373,30 @@ export function PlacesMap({ places, userCoords, className }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userCoords?.lat, userCoords?.lng]);
+
+  // ============================================================================
+  // EFFECT 1.5: flyTo handler. Escucha `hambuscador:flyTo` (CustomEvent en
+  // window) y vuela el mapa al destino. Lo dispara `<MapSearchInput>` cuando
+  // el usuario selecciona un place / comuna / región del dropdown. Decoupled
+  // via window event para no acoplar el input al map ref (viven en subtrees
+  // distintos).
+  // ============================================================================
+  useEffect(() => {
+    function onFlyTo(e: Event) {
+      const map = mapRef.current;
+      if (!map) return;
+      const detail = (e as CustomEvent<FlyToDetail>).detail;
+      if (!detail) return;
+      map.flyTo({
+        center: [detail.lng, detail.lat],
+        zoom: detail.zoom,
+        duration: 900,
+        essential: true,
+      });
+    }
+    window.addEventListener(FLY_TO_EVENT, onFlyTo);
+    return () => window.removeEventListener(FLY_TO_EVENT, onFlyTo);
+  }, []);
 
   // ============================================================================
   // EFFECT 2: pins-update. Cada vez que cambia `places` (filtros, búsqueda),
