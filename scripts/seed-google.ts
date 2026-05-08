@@ -43,11 +43,22 @@ import { places, type NewDbPlace } from "../src/server/db/schema";
 // Comunas piloto — 4 con alta densidad de hamburgueserías para validar
 // el pipeline antes de escalar a las 346.
 // ============================================================================
-const PILOT_COMUNAS = [
-  { slug: "providencia", label: "Providencia", region: "Región Metropolitana de Santiago" },
-  { slug: "las-condes", label: "Las Condes", region: "Región Metropolitana de Santiago" },
-  { slug: "nunoa", label: "Ñuñoa", region: "Región Metropolitana de Santiago" },
-  { slug: "concon", label: "Concón", region: "Región de Valparaíso" },
+type SeedComuna = {
+  slug: string;
+  label: string;
+  region: string;
+  /** Centroide (lat, lng). Usado para descartar places lejos de la
+   * comuna real — Google a veces devuelve places de comunas con el
+   * mismo nombre en otros países (Cartagena CO, San Rafael MX, AR). */
+  lat: number;
+  lng: number;
+};
+
+const PILOT_COMUNAS: SeedComuna[] = [
+  { slug: "providencia", label: "Providencia", region: "Región Metropolitana", lat: -33.4314, lng: -70.6093 },
+  { slug: "las-condes", label: "Las Condes", region: "Región Metropolitana", lat: -33.4083, lng: -70.5778 },
+  { slug: "nunoa", label: "Ñuñoa", region: "Región Metropolitana", lat: -33.4569, lng: -70.5972 },
+  { slug: "concon", label: "Concón", region: "Región de Valparaíso", lat: -32.9192, lng: -71.5269 },
 ];
 
 // ============================================================================
@@ -282,19 +293,50 @@ async function placeExists(comunaSlug: string, slug: string): Promise<boolean> {
 // ============================================================================
 // Main
 // ============================================================================
-async function loadAllComunas(): Promise<typeof PILOT_COMUNAS> {
+async function loadAllComunas(): Promise<SeedComuna[]> {
   const db = getDb();
   const rows = await db.execute<{
     slug: string;
     label: string;
     region_label: string;
-  }>(sql`SELECT slug, label, region_label FROM comunas ORDER BY region_label, label`);
+    lat: string;
+    lng: string;
+  }>(sql`SELECT slug, label, region_label, lat, lng FROM comunas ORDER BY region_label, label`);
   return rows.rows.map((r) => ({
     slug: r.slug,
     label: r.label,
     region: r.region_label,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
   }));
 }
+
+/**
+ * Distancia haversine en metros entre dos puntos (lat/lng decimal).
+ * Para descartar places que Google ubica lejos del centroide de la
+ * comuna queryada (típicamente Google devolvió un place de otra
+ * comuna o de otro país con mismo nombre).
+ */
+function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Threshold de distancia comuna→place. 80km cubre comunas grandes
+ * (rurales en Aysén, Magallanes) sin permitir mismatches groseros
+ * (San Rafael Mendoza estaría a ~300km de San Rafael Maule). */
+const MAX_COMUNA_DISTANCE_M = 80_000;
 
 async function main() {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
@@ -324,6 +366,7 @@ async function main() {
   let totalSkippedInvalid = 0;
   let totalSkippedWrongComuna = 0;
   let totalSkippedOutsideChile = 0;
+  let totalSkippedFarFromComuna = 0;
   let totalRequests = 0;
 
   let idx = 0;
@@ -372,6 +415,16 @@ async function main() {
       // contiene la comuna queryada.
       if (!isInsideChile(lat, lng)) {
         totalSkippedOutsideChile += 1;
+        continue;
+      }
+
+      // Distance check vs centroide de la comuna. Captura los casos donde
+      // el place pasa el bbox de Chile pero está en otra comuna del país
+      // (ej. San Rafael Mendoza AR cae dentro del bbox laxo, pero ~300km
+      // del San Rafael Maule centroid).
+      const distanceM = haversineMeters(lat, lng, comuna.lat, comuna.lng);
+      if (distanceM > MAX_COMUNA_DISTANCE_M) {
+        totalSkippedFarFromComuna += 1;
         continue;
       }
 
@@ -455,6 +508,7 @@ async function main() {
   console.log(`  Skip (sin coords):     ${totalSkippedInvalid}`);
   console.log(`  Skip (otra comuna):    ${totalSkippedWrongComuna}`);
   console.log(`  Skip (fuera de Chile): ${totalSkippedOutsideChile}`);
+  console.log(`  Skip (lejos centroid): ${totalSkippedFarFromComuna}`);
   console.log(`  Requests Google:       ${totalRequests} → ~USD ${(totalRequests * 0.035).toFixed(3)}`);
 
   await closeDb();
