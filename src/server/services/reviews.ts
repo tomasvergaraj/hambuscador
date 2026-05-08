@@ -152,6 +152,86 @@ export async function createReview(input: {
   return result;
 }
 
+export type PublicReview = {
+  id: string;
+  rating: number;
+  text: string | null;
+  photos: string[];
+  createdAt: Date;
+  author: {
+    id: string;
+    name: string;
+    initials: string;
+    username: string | null;
+  };
+  place: {
+    id: string;
+    name: string;
+    slug: string;
+    comunaSlug: string;
+    comunaLabel: string;
+    region: string;
+  };
+};
+
+/**
+ * Lookup público de una reseña por id, con su autor y local. null si no
+ * existe o si el autor está baneado (coherente con el ban retroactivo).
+ * Para `/r/[id]` y la OG dinámica.
+ */
+export async function getReviewById(reviewId: string): Promise<PublicReview | null> {
+  if (!isDbConfigured()) return null;
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: reviews.id,
+      rating: reviews.rating,
+      text: reviews.text,
+      photos: reviews.photos,
+      createdAt: reviews.createdAt,
+      authorId: users.id,
+      authorName: users.name,
+      authorUsername: users.username,
+      authorBannedAt: users.bannedAt,
+      placeId: places.id,
+      placeName: places.name,
+      placeSlug: places.slug,
+      placeComunaSlug: places.comunaSlug,
+      placeComunaLabel: places.comunaLabel,
+      placeRegion: places.region,
+    })
+    .from(reviews)
+    .innerJoin(users, eq(users.id, reviews.authorId))
+    .innerJoin(places, eq(places.id, reviews.placeId))
+    .where(eq(reviews.id, reviewId))
+    .limit(1);
+
+  if (!row || row.authorBannedAt) return null;
+
+  const name = row.authorName ?? "Anónimo";
+  return {
+    id: row.id,
+    rating: row.rating,
+    text: row.text,
+    photos: row.photos,
+    createdAt: row.createdAt,
+    author: {
+      id: row.authorId,
+      name,
+      initials: computeInitials(name),
+      username: row.authorUsername,
+    },
+    place: {
+      id: row.placeId,
+      name: row.placeName,
+      slug: row.placeSlug,
+      comunaSlug: row.placeComunaSlug,
+      comunaLabel: row.placeComunaLabel,
+      region: row.placeRegion,
+    },
+  };
+}
+
 /**
  * Reseña del usuario en este local (si existe). null si no hay.
  * No usa cache — depende de la sesión.

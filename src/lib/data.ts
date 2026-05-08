@@ -30,7 +30,10 @@ import {
 } from "@/server/services/comunas";
 import { getActiveRegions as getActiveRegionsSvc } from "@/server/services/regions";
 import { searchPublicUsers as searchPublicUsersSvc } from "@/server/services/users";
-import { getReviewsByPlaceId as getReviewsByPlaceIdSvc } from "@/server/services/reviews";
+import {
+  getReviewById as getReviewByIdSvc,
+  getReviewsByPlaceId as getReviewsByPlaceIdSvc,
+} from "@/server/services/reviews";
 import {
   MOCK_PLACES,
   MOCK_REVIEWS,
@@ -183,6 +186,15 @@ export const getReviewsByPlaceId = cache(
   },
   ["reviews-by-place"],
   { revalidate: 30, tags: ["reviews"] },
+);
+
+/**
+ * Reseña pública por id (con autor y local), para `/r/[id]` y su OG.
+ */
+export const getReviewById = cache(
+  async (reviewId: string) => getReviewByIdSvc(reviewId),
+  ["review-by-id"],
+  { revalidate: 60, tags: ["reviews"] },
 );
 
 // ============================================================================

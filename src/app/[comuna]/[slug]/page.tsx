@@ -1,4 +1,4 @@
-import { IconArrowLeft, IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPencil, IconPhone, IconPhoto, IconRosetteDiscountCheckFilled, IconTrash, IconHeart } from "@tabler/icons-react";
+import { IconArrowLeft, IconBrandInstagram, IconCash, IconClock, IconFlame, IconMapPin, IconPencil, IconPhone, IconPhoto, IconRosetteDiscountCheckFilled, IconShare, IconTrash, IconHeart } from "@tabler/icons-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -271,6 +271,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                 )}
                 <div className="flex items-center gap-1">
                   <Link
+                    href={`/r/${mine.id}`}
+                    aria-label="ver y compartir"
+                    className="flex items-center justify-center w-8 h-8 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90"
+                  >
+                    <IconShare size={15} aria-hidden="true" />
+                  </Link>
+                  <Link
                     href={`/${place.comuna}/${place.slug}/calificar`}
                     aria-label="editar reseña"
                     className="flex items-center justify-center w-8 h-8 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90"
@@ -315,7 +322,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                   key={review.id}
                   className="bg-crema-deep rounded-lg border border-crema-edge p-3"
                 >
-                  <header className="mb-2">
+                  <header className="mb-2 flex items-start justify-between gap-2">
                     {review.authorUsername ? (
                       <Link
                         href={`/u/${review.authorUsername}`}
@@ -348,6 +355,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                         </div>
                       </div>
                     )}
+                    <Link
+                      href={`/r/${review.id}`}
+                      aria-label="ver reseña"
+                      className="flex items-center justify-center w-7 h-7 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90 shrink-0"
+                    >
+                      <IconShare size={13} aria-hidden="true" />
+                    </Link>
                   </header>
                   {review.text && (
                     <p className="text-xs text-carbon leading-relaxed">{review.text}</p>
