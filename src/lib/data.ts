@@ -84,6 +84,8 @@ export const searchPlaces = cache(
       openNow?: boolean;
       sort?: "rating" | "recent" | "distance";
       userCoords?: { lat: number; lng: number };
+      /** Default 30 (lista). El mapa pide más para ver todos los pins. */
+      limit?: number;
     },
   ) => {
     return searchPlacesSvc({
@@ -94,6 +96,7 @@ export const searchPlaces = cache(
       openNow: filters?.openNow,
       sort: filters?.sort,
       userCoords: filters?.userCoords,
+      limit: filters?.limit,
     });
   },
   ["places-search"],

@@ -56,12 +56,18 @@ export default async function BuscarPage({
   // userCoords solo entra al cache key cuando sort=distance (sino fragmenta
   // la cache por usuario sin cambiar el resultado).
   const effectiveSort = sort === "distance" && !userCoords ? "rating" : sort;
+  // Limit: lista 30 (default), mapa 5000 — todos los pins. La lista
+  // ordenada por distancia muestra los más cercanos primero, lo que el
+  // usuario espera. El mapa permite explorar todo Chile sin restringir
+  // por proximidad — es lo que el usuario espera al ver la geografía.
+  const limit = view === "mapa" ? 5000 : undefined;
   const { items: results, usedFuzzy } = await searchPlaces(query, {
     cuisines: cuisines.length ? cuisines : undefined,
     priceRanges: priceRanges.length ? priceRanges : undefined,
     openNow: openNow || undefined,
     sort: effectiveSort,
     userCoords: effectiveSort === "distance" ? (userCoords ?? undefined) : undefined,
+    limit,
   });
 
   // Logging de la búsqueda — fire-and-forget vía `next/after()` para no bloquear
