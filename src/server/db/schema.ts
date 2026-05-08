@@ -42,8 +42,12 @@ export const users = pgTable("users", {
 
   /**
    * Si está seteado, el usuario está baneado y no puede iniciar sesión.
-   * Sus reseñas y aportes existentes quedan visibles (el ban es preventivo,
-   * no retroactivo). Un admin puede unban seteando a null.
+   * El ban es retroactivo en lecturas públicas: las reseñas se ocultan y
+   * los agregados (rating_avg, review_count) se recalculan en banUser/
+   * unbanUser. Los aportes (places submitidos) aprobados quedan visibles
+   * porque la utilidad pública la da el local, no el submitter; los
+   * pending llevan tag de advertencia en /admin/moderacion. Un admin
+   * puede unban seteando a null y todo se restaura.
    */
   bannedAt: timestamp("banned_at", { withTimezone: true }),
 
