@@ -181,6 +181,34 @@ function formatHM(h?: number, m?: number): string | null {
   return `${String(h).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
 }
 
+/**
+ * Google `websiteUri` viene como cualquier URL que el negocio registró.
+ * Muchos PYMEs ponen su WhatsApp o Instagram ahí. Clasificamos para
+ * rutear al campo correcto en vez de saturar el botón "sitio web" con
+ * links de IG/WA.
+ */
+function classifyWebsite(url: string | undefined | null): {
+  website: string | null;
+  whatsapp: string | null;
+  instagram: string | null;
+} {
+  if (!url) return { website: null, whatsapp: null, instagram: null };
+  const u = url.trim();
+  const lower = u.toLowerCase();
+
+  if (lower.includes("wa.me") || lower.includes("whatsapp.com")) {
+    const m = u.match(/\d{8,}/);
+    return { website: null, whatsapp: m ? m[0] : null, instagram: null };
+  }
+
+  if (lower.includes("instagram.com") || lower.includes("instagr.am")) {
+    const m = u.match(/instagra(?:m\.com|m\.am)\/([^/?#]+)/i);
+    return { website: null, whatsapp: null, instagram: m && m[1] ? m[1] : null };
+  }
+
+  return { website: u, whatsapp: null, instagram: null };
+}
+
 function buildHoursByDay(
   periods: GoogleOpeningPeriod[] | undefined,
 ): Record<string, string | null> | null {
@@ -336,6 +364,9 @@ async function main() {
       const summary = summarize(byDay);
       const phone = g.nationalPhoneNumber ?? g.internationalPhoneNumber ?? null;
       const priceRange = (g.priceLevel && PRICE_MAP[g.priceLevel]) ?? "$$";
+      // Google websiteUri suele ser un wa.me/<phone> o instagram.com/<handle>
+      // — clasificamos para rutear al campo correcto.
+      const classified = classifyWebsite(g.websiteUri);
 
       const place: NewDbPlace = {
         name,
@@ -353,9 +384,9 @@ async function main() {
         hoursWeekends: summary.weekends || null,
         hoursByDay: byDay,
         phone,
-        whatsapp: null,
-        instagram: null,
-        website: g.websiteUri ?? null,
+        whatsapp: classified.whatsapp,
+        instagram: classified.instagram,
+        website: classified.website,
         photos: [],
         moderationStatus: "pending",
         submittedBy: null,
