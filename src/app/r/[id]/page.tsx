@@ -48,11 +48,13 @@ export default async function ReviewPage({
   if (!review) notFound();
 
   const placeHref = `/${review.place.comunaSlug}/${review.place.slug}`;
+  // unstable_cache serializa Date → string al hidratar; nuevo Date para
+  // tolerar ambas formas (cache miss = Date, cache hit = string ISO).
   const date = new Intl.DateTimeFormat("es-CL", {
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(review.createdAt);
+  }).format(new Date(review.createdAt));
 
   return (
     <div className="flex flex-col min-h-screen pb-24">
