@@ -11,6 +11,7 @@ import {
   IconPhoto,
   IconRosetteDiscountCheckFilled,
   IconShare,
+  IconSparkles,
   IconTrash,
   IconHeart,
   IconWorld,
@@ -170,6 +171,15 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                 >
                   <IconRosetteDiscountCheckFilled size={12} aria-hidden="true" />
                   verificado
+                </span>
+              )}
+              {place.isFeatured && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider bg-tomate/15 text-tomate px-2 py-0.5 rounded-full"
+                  title="local destacado por publicidad"
+                >
+                  <IconSparkles size={12} aria-hidden="true" />
+                  destacado
                 </span>
               )}
             </h1>

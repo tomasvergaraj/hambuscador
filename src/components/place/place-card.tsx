@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { IconPhoto, IconRosetteDiscountCheckFilled } from "@tabler/icons-react";
+import { IconPhoto, IconRosetteDiscountCheckFilled, IconSparkles } from "@tabler/icons-react";
 import type { Place } from "@/types/place";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -59,7 +59,15 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
             />
           )}
           <StatusPill status={place.status} className="absolute top-2.5 left-2.5" />
-          {distance ? (
+          {place.isFeatured ? (
+            <span
+              className="absolute top-2.5 right-2.5 inline-flex items-center gap-1 bg-tomate text-crema-deep px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider"
+              title="local destacado por publicidad"
+            >
+              <IconSparkles size={11} aria-hidden="true" />
+              destacado
+            </span>
+          ) : distance ? (
             <span className="absolute top-2.5 right-2.5 bg-carbon/70 text-white px-2 py-1 rounded-md text-[11px]">
               {distance}
             </span>
@@ -82,6 +90,9 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
           <div className="flex items-center gap-2 mt-2 text-xs">
             <RatingPill rating={place.rating} size="sm" />
             <span className="text-bronceado">· {formatReviewCount(place.reviewCount)}</span>
+            {place.isFeatured && distance ? (
+              <span className="text-bronceado">· {distance}</span>
+            ) : null}
           </div>
         </div>
       </Link>
@@ -125,6 +136,13 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
                 size={14}
                 className="text-mostaza shrink-0"
                 aria-label="local verificado"
+              />
+            )}
+            {place.isFeatured && (
+              <IconSparkles
+                size={14}
+                className="text-tomate shrink-0"
+                aria-label="local destacado por publicidad"
               />
             )}
           </h3>
