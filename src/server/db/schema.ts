@@ -227,6 +227,50 @@ export const favorites = pgTable(
 );
 
 /**
+ * Catálogo de comunas de Chile (346). Tabla seeded con metadata cartográfica
+ * (centroide). Source of truth para el dropdown de `/agregar`, las sugerencias
+ * de `/api/search/suggest` y los filtros server-rendered.
+ *
+ * `region_label` se denormaliza para que el match con `places.region` sea
+ * directo (la columna `places.region` es text, no FK). `region_slug` es FK
+ * a `regions` para joins con metadata cartográfica de la región.
+ *
+ * Migration: `drizzle/2026-05-08-comunas.sql`.
+ */
+export const comunas = pgTable(
+  "comunas",
+  {
+    slug: text("slug").primaryKey(),
+    label: text("label").notNull(),
+    regionSlug: text("region_slug")
+      .notNull()
+      .references(() => regions.slug),
+    regionLabel: text("region_label").notNull(),
+    lat: numeric("lat", { precision: 10, scale: 7 }).notNull(),
+    lng: numeric("lng", { precision: 10, scale: 7 }).notNull(),
+  },
+  (table) => ({
+    regionSlugIdx: index("comunas_region_slug_idx").on(table.regionSlug),
+  }),
+);
+
+/**
+ * Catálogo de regiones de Chile (16). Tabla seeded con metadata cartográfica
+ * estable: centroide aproximado + zoom sugerido para `flyTo` desde el buscador
+ * del mapa. La derivación dinámica (qué regiones MOSTRAR como sugerencia)
+ * matchea contra `places.region` (label exacto, ver INSERTs en
+ * `drizzle/2026-05-08-regions.sql`). Cuando aporten un local en una región
+ * sin presencia previa, aparece automáticamente como sugerencia.
+ */
+export const regions = pgTable("regions", {
+  slug: text("slug").primaryKey(),
+  label: text("label").notNull().unique(),
+  lat: numeric("lat", { precision: 10, scale: 7 }).notNull(),
+  lng: numeric("lng", { precision: 10, scale: 7 }).notNull(),
+  zoom: integer("zoom").notNull(),
+});
+
+/**
  * Log de queries de /buscar. Una fila por visita (no por keystroke). Sirve
  * para detectar queries populares y queries sin resultado, que son la base
  * para nuevos sinónimos en `lib/search.ts`. Migración:
@@ -264,6 +308,8 @@ export type DbPlace = typeof places.$inferSelect;
 export type DbReview = typeof reviews.$inferSelect;
 export type DbFavorite = typeof favorites.$inferSelect;
 export type DbSearchLog = typeof searchLogs.$inferSelect;
+export type DbRegion = typeof regions.$inferSelect;
+export type DbComuna = typeof comunas.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

@@ -24,6 +24,11 @@ import {
   getPlacesForPicasList as getPlacesForPicasListSvc,
   getPicasListsWithCounts as getPicasListsWithCountsSvc,
 } from "@/server/services/picas";
+import {
+  getActiveComunas as getActiveComunasSvc,
+  getAllComunas as getAllComunasSvc,
+} from "@/server/services/comunas";
+import { getActiveRegions as getActiveRegionsSvc } from "@/server/services/regions";
 import { getReviewsByPlaceId as getReviewsByPlaceIdSvc } from "@/server/services/reviews";
 import {
   MOCK_PLACES,
@@ -123,6 +128,39 @@ export const getPicasListsWithCounts = cache(
   async () => getPicasListsWithCountsSvc(),
   ["picas-lists-counts"],
   { revalidate: 300, tags: ["places"] },
+);
+
+/**
+ * Regiones de Chile con ≥1 place aprobado. Cache larga porque cambia rara vez
+ * (solo cuando llega la primera picá de una región nueva). Se invalida con el
+ * tag `places` que ya disparan aprobaciones / creates.
+ */
+export const getActiveRegions = cache(
+  async () => getActiveRegionsSvc(),
+  ["regions-active"],
+  { revalidate: 600, tags: ["places"] },
+);
+
+/**
+ * Comunas con ≥1 place aprobado — para el dropdown de sugerencias y filtros.
+ * Cache moderada porque el set crece cuando aprueban un local en una comuna
+ * nueva. Tag `places` la invalida con cada aprobación.
+ */
+export const getActiveComunas = cache(
+  async () => getActiveComunasSvc(),
+  ["comunas-active"],
+  { revalidate: 600, tags: ["places"] },
+);
+
+/**
+ * Las 346 comunas oficiales. Para el wizard `/agregar` (autocomplete sobre
+ * todo el país). Cache larga porque cambia rara vez (creación de regiones/
+ * comunas es proceso legal de años).
+ */
+export const getAllComunas = cache(
+  async () => getAllComunasSvc(),
+  ["comunas-all"],
+  { revalidate: 86400 },
 );
 
 /**

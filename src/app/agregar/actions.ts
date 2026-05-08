@@ -4,7 +4,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { COMUNAS_REGISTRY, CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { getAllComunas } from "@/lib/data";
 import { auth } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
 import { createPlace, placeExists } from "@/server/services/places";
@@ -19,7 +20,6 @@ import { createPlace, placeExists } from "@/server/services/places";
 
 const cuisineIds = CUISINE_TYPES.map((c) => c.id) as [string, ...string[]];
 const priceIds = PRICE_RANGES.map((p) => p.id) as [string, ...string[]];
-const comunaSlugs = COMUNAS_REGISTRY.map((c) => c.slug) as [string, ...string[]];
 
 // Bounding box (laxo) para Chile continental + insular cercana
 const CHILE_LAT_MIN = -56;
@@ -29,7 +29,7 @@ const CHILE_LNG_MAX = -66;
 
 const placeSchema = z.object({
   name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(100),
-  comunaSlug: z.enum(comunaSlugs, { errorMap: () => ({ message: "Elige una comuna" }) }),
+  comunaSlug: z.string().trim().min(1, "Elige una comuna"),
   address: z.string().trim().min(5, "La dirección está muy corta").max(200),
   lat: z.coerce
     .number()
@@ -115,7 +115,8 @@ export async function createPlaceAction(
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
 
-  const comuna = COMUNAS_REGISTRY.find((c) => c.slug === parsed.data.comunaSlug);
+  const allComunas = await getAllComunas();
+  const comuna = allComunas.find((c) => c.slug === parsed.data.comunaSlug);
   if (!comuna) {
     return { error: "Comuna desconocida" };
   }
@@ -125,7 +126,7 @@ export async function createPlaceAction(
       name: parsed.data.name,
       comunaSlug: comuna.slug,
       comunaLabel: comuna.label,
-      region: comuna.region,
+      region: comuna.regionLabel,
       address: parsed.data.address,
       lat: parsed.data.lat,
       lng: parsed.data.lng,

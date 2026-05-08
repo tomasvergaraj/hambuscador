@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 
 import { Header } from "@/components/nav/header";
 import { AddressAutocomplete } from "@/components/place/address-autocomplete";
+import { ComunaAutocomplete } from "@/components/place/comuna-autocomplete";
 import {
   DEFAULT_SCHEDULE,
   DaysSchedule,
@@ -18,8 +19,9 @@ import { PinPickerMap } from "@/components/place/pin-picker-map";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ProgressDots } from "@/components/ui/progress-dots";
-import { COMUNAS_REGISTRY, CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
+import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import type { Comuna } from "@/server/services/comunas";
 
 import {
   checkPlaceExistsAction,
@@ -30,11 +32,11 @@ import {
 const initial: CreatePlaceState = {};
 type Step = 1 | 2 | 3;
 
-export function AgregarWizard() {
+export function AgregarWizard({ comunas }: { comunas: Comuna[] }) {
   const [step, setStep] = useState<Step>(1);
 
   const [name, setName] = useState("");
-  const [comunaSlug, setComunaSlug] = useState("");
+  const [comuna, setComuna] = useState<Comuna | null>(null);
   const [address, setAddress] = useState("");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
@@ -57,25 +59,23 @@ export function AgregarWizard() {
   const hoursWeekends = summarizeWeekends(schedule);
 
   // Sesgo geográfico para el autocomplete: centroide de la comuna seleccionada
-  const bias = useMemo(() => {
-    const c = COMUNAS_REGISTRY.find((c) => c.slug === comunaSlug);
-    return c ? { lat: c.lat, lng: c.lng } : undefined;
-  }, [comunaSlug]);
+  const bias = comuna ? { lat: comuna.lat, lng: comuna.lng } : undefined;
 
   const hasCoords = lat !== null && lng !== null;
   const step1Valid =
-    name.trim().length >= 2 && comunaSlug.length > 0 && address.trim().length >= 5 && hasCoords;
+    name.trim().length >= 2 && comuna !== null && address.trim().length >= 5 && hasCoords;
   const step2Valid = cuisines.length > 0 && priceRange.length > 0;
   const canContinue = step === 1 ? step1Valid : step === 2 ? step2Valid : true;
 
   async function handleContinue() {
     if (step === 1) {
       setStep1Error(null);
+      if (!comuna) return;
       setCheckingDup(true);
       try {
         const { exists } = await checkPlaceExistsAction({
           name: name.trim(),
-          comunaSlug,
+          comunaSlug: comuna.slug,
         });
         if (exists) {
           setStep1Error(
@@ -110,7 +110,7 @@ export function AgregarWizard() {
     <form action={formAction} className="flex flex-col min-h-screen pb-24">
       {/* Hidden inputs que mirroran el state — todos van al action sin importar el paso visible */}
       <input type="hidden" name="name" value={name} />
-      <input type="hidden" name="comunaSlug" value={comunaSlug} />
+      <input type="hidden" name="comunaSlug" value={comuna?.slug ?? ""} />
       <input type="hidden" name="address" value={address} />
       <input type="hidden" name="lat" value={lat ?? ""} />
       <input type="hidden" name="lng" value={lng ?? ""} />
@@ -157,21 +157,20 @@ export function AgregarWizard() {
             </Field>
 
             <Field label="comuna">
-              <select
-                value={comunaSlug}
-                onChange={(e) => {
-                  setComunaSlug(e.target.value);
+              <ComunaAutocomplete
+                comunas={comunas}
+                value={comuna}
+                onChange={(c) => {
+                  setComuna(c);
                   if (step1Error) setStep1Error(null);
+                  // Si cambió la comuna, invalidamos las coords del local
+                  // para forzar a re-elegir dirección dentro de la comuna nueva.
+                  if (hasCoords) {
+                    setLat(null);
+                    setLng(null);
+                  }
                 }}
-                className={INPUT_CLS}
-              >
-                <option value="">elige una comuna...</option>
-                {COMUNAS_REGISTRY.map((c) => (
-                  <option key={c.slug} value={c.slug}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
 
             <Field label="dirección">

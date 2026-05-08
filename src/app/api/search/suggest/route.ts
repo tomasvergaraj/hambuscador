@@ -17,8 +17,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 
-import { COMUNAS_REGISTRY, REGIONS_REGISTRY } from "@/lib/constants";
-import { searchPlaces } from "@/lib/data";
+import { getActiveComunas, getActiveRegions, searchPlaces } from "@/lib/data";
 import { PICAS_LISTS } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 
@@ -59,9 +58,9 @@ export async function GET(req: NextRequest) {
     .slice(0, 3)
     .map((l) => ({ slug: l.slug, title: l.title, icon: l.icon }));
 
-  const comunas = COMUNAS_REGISTRY.filter((c) =>
-    normalizeForSearch(c.label).includes(normalized),
-  )
+  const activeComunas = await getActiveComunas();
+  const comunas = activeComunas
+    .filter((c) => normalizeForSearch(c.label).includes(normalized))
     .slice(0, 4)
     .map((c) => ({
       slug: c.slug,
@@ -70,9 +69,9 @@ export async function GET(req: NextRequest) {
       lng: c.lng,
     }));
 
-  const regions = REGIONS_REGISTRY.filter((r) =>
-    normalizeForSearch(r.label).includes(normalized),
-  )
+  const activeRegions = await getActiveRegions();
+  const regions = activeRegions
+    .filter((r) => normalizeForSearch(r.label).includes(normalized))
     .slice(0, 3)
     .map((r) => ({
       slug: r.slug,

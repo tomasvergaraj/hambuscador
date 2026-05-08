@@ -83,10 +83,12 @@ export type ComunaSlug = (typeof COMUNAS_REGISTRY)[number]["slug"];
 export const SEED_COMUNAS = COMUNAS_REGISTRY.map((c) => c.slug);
 
 /**
- * Registry de regiones donde tenemos presencia. Centroide aproximado +
- * zoom sugerido para flyTo desde el buscador del mapa. Se mantiene
- * hardcoded mientras el catálogo sea pequeño; cuando crezca lo derivamos
- * de COMUNAS_REGISTRY agregando los centroides.
+ * Fallback de regiones para modo demo (sin DATABASE_URL). En producción la
+ * source of truth es la tabla `regions` (16 filas seedeadas vía
+ * `drizzle/2026-05-08-regions.sql`), filtradas por presencia en
+ * `getActiveRegions()`. Mantener este registry alineado al subset de regiones
+ * que aparecen en `MOCK_PLACES` para que el dropdown se sienta consistente
+ * en `pnpm dev` sin DB.
  */
 export const REGIONS_REGISTRY = [
   {
