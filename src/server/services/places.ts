@@ -42,6 +42,7 @@ function dbPlaceToUi(row: DbPlace, distanceM?: number): Place {
     },
     distanceM,
     photos: row.photos,
+    logo: row.logo ?? undefined,
     phone: row.phone ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
     instagram: row.instagram ?? undefined,
@@ -457,6 +458,7 @@ export async function updatePlace(
     whatsapp?: string | null;
     instagram?: string | null;
     website?: string | null;
+    logo?: string | null;
     photos?: string[];
     isVerified?: boolean;
     isFeatured?: boolean;
@@ -485,6 +487,7 @@ export async function updatePlace(
   if (patch.whatsapp !== undefined) updates.whatsapp = patch.whatsapp;
   if (patch.instagram !== undefined) updates.instagram = patch.instagram;
   if (patch.website !== undefined) updates.website = patch.website;
+  if (patch.logo !== undefined) updates.logo = patch.logo;
   if (patch.photos !== undefined) updates.photos = patch.photos;
   if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
   if (patch.isFeatured !== undefined) updates.isFeatured = patch.isFeatured;

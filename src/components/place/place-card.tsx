@@ -30,6 +30,11 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
   const cuisineLabel = place.cuisines[0];
   const priceLabel = priceLabels[place.priceRange];
   const heroPhoto = place.photos[0];
+  // Thumb chico (78×78 en compact): preferimos logo cuando existe — un
+  // crop de foto de comida queda raro a ese tamaño, un logo cuadrado sí.
+  // El hero del featured card (128px) sigue con foto: ahí la cover apetitosa
+  // funciona mejor que un logo lavado.
+  const compactThumb = place.logo ?? heroPhoto;
 
   if (variant === "featured") {
     return (
@@ -110,12 +115,12 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
       )}
     >
       <div className="w-[78px] h-[78px] shrink-0 flex items-center justify-center relative bg-mostaza-deep">
-        {heroPhoto ? (
+        {compactThumb ? (
           <Image
-            src={heroPhoto}
+            src={compactThumb}
             alt={place.name}
             fill
-            className="object-cover"
+            className={place.logo ? "object-contain p-1" : "object-cover"}
             sizes="78px"
           />
         ) : (

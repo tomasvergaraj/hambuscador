@@ -55,6 +55,7 @@ const editSchema = z.object({
     .url("La URL del sitio web no es válida")
     .optional()
     .or(z.literal("")),
+  logo: z.string().trim().url().optional().or(z.literal("")),
   photos: z.array(z.string().url()).max(6).default([]),
   isVerified: z.coerce.boolean().optional(),
   isFeatured: z.coerce.boolean().optional(),
@@ -101,6 +102,7 @@ export async function updatePlaceAction(
     whatsapp: formData.get("whatsapp"),
     instagram: formData.get("instagram"),
     website: formData.get("website"),
+    logo: formData.get("logo"),
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
     isVerified: formData.get("isVerified") === "on",
     isFeatured: formData.get("isFeatured") === "on",
@@ -127,6 +129,7 @@ export async function updatePlaceAction(
     whatsapp: parsed.data.whatsapp || null,
     instagram: parsed.data.instagram || null,
     website: parsed.data.website || null,
+    logo: parsed.data.logo || null,
     photos: parsed.data.photos,
     isVerified: parsed.data.isVerified ?? false,
     isFeatured: parsed.data.isFeatured ?? false,

@@ -31,6 +31,8 @@ export type Place = {
   coords: { lat: number; lng: number };
   distanceM?: number; // distance del usuario, calculada en runtime
   photos: string[]; // URLs absolutas (TODO Fase 2: integrar storage)
+  /** URL del logo de marca (admin-only). Reemplaza thumbnails chicos cuando existe. */
+  logo?: string;
   phone?: string;
   whatsapp?: string;
   instagram?: string;

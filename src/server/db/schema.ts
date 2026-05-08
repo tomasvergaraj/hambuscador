@@ -148,6 +148,15 @@ export const places = pgTable(
     whatsapp: text("whatsapp"),
     instagram: text("instagram"),
     website: text("website"),
+    /**
+     * Logo de marca (URL pública en R2). Cuando está presente, reemplaza
+     * el thumbnail de la PlaceCard compact (78×78) — un logo en formato
+     * cuadrado lee mejor a ese tamaño que un crop de foto de comida.
+     * El hero del detail page y el featured card siguen usando `photos`
+     * (la primera foto) que es la cover natural.
+     * Editable solo desde admin (locales reclamados / verificados).
+     */
+    logo: text("logo"),
     photos: text("photos").array().notNull().default(sql`'{}'::text[]`),
 
     // Moderación / autoría

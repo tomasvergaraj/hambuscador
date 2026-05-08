@@ -48,6 +48,7 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const [instagram, setInstagram] = useState(place.instagram ?? "");
   const [website, setWebsite] = useState(place.website ?? "");
   const [photos, setPhotos] = useState<string[]>(place.photos);
+  const [logo, setLogo] = useState<string[]>(place.logo ? [place.logo] : []);
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
   const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
 
@@ -258,6 +259,18 @@ export function EditPlaceForm({ place }: { place: Place }) {
             />
           </Field>
         </div>
+      </Section>
+
+      {/* Bloque: logo de marca (admin-only). Reemplaza el thumbnail chico de
+          la card. La galería de fotos sigue para el hero del detail page. */}
+      <Section title="logo de marca">
+        <PhotoUploader value={logo} onChange={setLogo} max={1} />
+        <input type="hidden" name="logo" value={logo[0] ?? ""} />
+        <p className="text-[11px] text-bronceado">
+          opcional. cuando está presente, se usa como thumbnail en cards y
+          listados (cuadrado, 78×78). la galería de fotos sigue siendo la cover
+          del hero. ideal para locales reclamados con identidad visual.
+        </p>
       </Section>
 
       {/* Bloque: fotos */}
