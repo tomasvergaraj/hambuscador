@@ -361,6 +361,34 @@ export const searchLogs = pgTable(
   }),
 );
 
+/**
+ * Tokens de recuperación de password. Una fila por solicitud. El `token`
+ * es la clave (PK) — random 32 bytes hex (no se puede enumerar). El user
+ * recibe un link `/recuperar/<token>` por email.
+ *
+ * Idempotencia: el mismo user puede pedir varios resets — el más reciente
+ * gana en UX, pero los anteriores siguen válidos hasta `expires_at` (TTL ~1h).
+ * `used_at` se setea al consumirlo, así no sirve dos veces.
+ *
+ * Migration: drizzle/2026-05-09-password-reset-tokens.sql
+ */
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    token: text("token").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdx: index("password_reset_tokens_user_idx").on(table.userId),
+    expiresIdx: index("password_reset_tokens_expires_idx").on(table.expiresAt),
+  }),
+);
+
 // ============================================================================
 // Tipos derivados — preferir estos antes que los de @/types/place cuando se
 // está en la capa de DB/server. Los de @/types/place son para la UI.
@@ -374,6 +402,7 @@ export type DbSearchLog = typeof searchLogs.$inferSelect;
 export type DbRegion = typeof regions.$inferSelect;
 export type DbComuna = typeof comunas.$inferSelect;
 export type DbPlaceClaim = typeof placeClaims.$inferSelect;
+export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;
