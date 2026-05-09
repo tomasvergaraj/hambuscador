@@ -19,6 +19,7 @@
     "db:studio": "drizzle-kit studio",
     "db:postgis": "tsx scripts/run-sql.ts drizzle/postgis.sql",
     "db:seed": "tsx scripts/seed.ts",
+    "db:dedupe": "tsx scripts/dedupe-places.ts",
     "db:reset": "docker compose down -v && docker compose up -d && sleep 3 && pnpm db:push && pnpm db:postgis && pnpm db:seed"
   },
   "dependencies": {
