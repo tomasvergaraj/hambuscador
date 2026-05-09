@@ -13,16 +13,33 @@ import { Logo } from "@/components/brand/logo";
 // flujo manual (Compartir → Agregar a inicio) — ahí el toast no aparece.
 // =============================================================================
 
-// localStorage: lo marcamos cuando el usuario hace "después" o "X" — no
-// volver a mostrar nunca (hasta que limpie storage).
+// Permanente: el usuario hizo "X" o instaló — no volver a mostrar nunca.
 const DISMISSED_KEY = "hb-install-dismissed";
-// sessionStorage: lo marcamos al primer render del toast — así no reaparece
-// en cada navegación cliente. Reset al cerrar pestaña.
-const SHOWN_THIS_SESSION_KEY = "hb-install-shown";
+// Cooldown: se setea con timestamp ISO en cada exposición. Mientras esté
+// dentro del cooldown, no mostramos. "después" extiende este timestamp.
+const LAST_PROMPT_AT_KEY = "hb-install-last-prompt-at";
+// Conteo de visitas (sesiones distintas). Solo prompteamos a partir de la
+// 3ra visita — la 1ra y 2da el usuario está descubriendo la app, no
+// queremos interrumpirlo todavía.
+const VISIT_COUNT_KEY = "hb-install-visits";
+// Marca que ya contamos esta sesión (sessionStorage).
+const SESSION_COUNTED_KEY = "hb-install-session-counted";
+
+const MIN_VISITS_BEFORE_PROMPT = 3;
+const COOLDOWN_DAYS = 15;
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+function isInCooldown(): boolean {
+  const lastAt = localStorage.getItem(LAST_PROMPT_AT_KEY);
+  if (!lastAt) return false;
+  const ts = Date.parse(lastAt);
+  if (Number.isNaN(ts)) return false;
+  const days = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+  return days < COOLDOWN_DAYS;
 }
 
 export function PwaInstaller() {
@@ -46,25 +63,52 @@ export function PwaInstaller() {
     return () => window.removeEventListener("load", onLoad);
   }, []);
 
-  // Listener de install prompt
+  // Listener de install prompt (con gating de cooldown + visitas + interacción)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (localStorage.getItem(DISMISSED_KEY)) return;
-    if (sessionStorage.getItem(SHOWN_THIS_SESSION_KEY)) return;
 
-    const onPrompt = (e: Event) => {
-      // Evita el banner default del browser para usar el nuestro
-      e.preventDefault();
-      // Marca shown para esta sesión — Chrome redispatcha el evento en
-      // algunas navegaciones, sin esto el toast reaparece cada cambio
-      // de pantalla.
-      sessionStorage.setItem(SHOWN_THIS_SESSION_KEY, "1");
-      setInstallEvent(e as BeforeInstallPromptEvent);
+    // Contador de visitas: sumamos +1 una vez por sesión
+    if (!sessionStorage.getItem(SESSION_COUNTED_KEY)) {
+      const prev = parseInt(localStorage.getItem(VISIT_COUNT_KEY) ?? "0", 10);
+      const next = (Number.isFinite(prev) ? prev : 0) + 1;
+      localStorage.setItem(VISIT_COUNT_KEY, String(next));
+      sessionStorage.setItem(SESSION_COUNTED_KEY, "1");
+    }
+
+    const visits = parseInt(localStorage.getItem(VISIT_COUNT_KEY) ?? "0", 10);
+    if (visits < MIN_VISITS_BEFORE_PROMPT) return;
+    if (isInCooldown()) return;
+
+    let pendingEvent: BeforeInstallPromptEvent | null = null;
+    let interacted = false;
+
+    const reveal = () => {
+      if (!pendingEvent || !interacted) return;
+      localStorage.setItem(LAST_PROMPT_AT_KEY, new Date().toISOString());
+      setInstallEvent(pendingEvent);
       setVisible(true);
     };
+
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      pendingEvent = e as BeforeInstallPromptEvent;
+      reveal();
+    };
+
+    const onInteract = () => {
+      interacted = true;
+      reveal();
+    };
+
     window.addEventListener("beforeinstallprompt", onPrompt);
+    // Esperamos al menos un scroll/click — significa que el usuario está
+    // usando la app, no acaba de aterrizar.
+    window.addEventListener("scroll", onInteract, { once: true, passive: true });
+    window.addEventListener("pointerdown", onInteract, { once: true });
 
     const onInstalled = () => {
+      localStorage.setItem(DISMISSED_KEY, "1");
       setVisible(false);
       setInstallEvent(null);
     };
@@ -72,6 +116,8 @@ export function PwaInstaller() {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("scroll", onInteract);
+      window.removeEventListener("pointerdown", onInteract);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
@@ -80,11 +126,19 @@ export function PwaInstaller() {
     if (!installEvent) return;
     await installEvent.prompt();
     await installEvent.userChoice;
+    localStorage.setItem(DISMISSED_KEY, "1");
     setVisible(false);
     setInstallEvent(null);
   }
 
-  function handleDismiss() {
+  // "después": cierra ahora y arma cooldown de 14 días.
+  function handleLater() {
+    localStorage.setItem(LAST_PROMPT_AT_KEY, new Date().toISOString());
+    setVisible(false);
+  }
+
+  // X: cierra para siempre.
+  function handleDismissPermanent() {
     localStorage.setItem(DISMISSED_KEY, "1");
     setVisible(false);
   }
@@ -113,7 +167,7 @@ export function PwaInstaller() {
             </button>
             <button
               type="button"
-              onClick={handleDismiss}
+              onClick={handleLater}
               className="text-[11px] text-crema-edge hover:text-crema px-2"
             >
               después
@@ -122,7 +176,7 @@ export function PwaInstaller() {
         </div>
         <button
           type="button"
-          onClick={handleDismiss}
+          onClick={handleDismissPermanent}
           aria-label="cerrar"
           className="text-crema-edge hover:text-crema p-1 -mt-1 -mr-1"
         >
