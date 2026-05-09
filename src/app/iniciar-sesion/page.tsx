@@ -12,8 +12,8 @@ export default function IniciarSesionPage() {
   const googleEnabled = !!(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
   return (
-    <div className="flex flex-col min-h-screen px-6 py-8">
-      <div className="flex justify-end mb-2">
+    <div className="flex flex-col px-6 pt-4 pb-8">
+      <div className="flex justify-end">
         <Link
           href="/"
           aria-label="cerrar"
@@ -23,22 +23,22 @@ export default function IniciarSesionPage() {
         </Link>
       </div>
 
-      <div className="flex flex-col items-center pt-6">
-        <Logo variant="icon" size={64} />
+      <div className="flex flex-col items-center mt-1">
+        <Logo variant="icon" size={56} />
       </div>
 
-      <header className="text-center mt-5 mb-8">
+      <header className="text-center mt-3 mb-5">
         <h1 className="font-display font-semibold text-2xl text-carbon tracking-tight">
           hola de nuevo
         </h1>
-        <p className="text-xs text-tinta-suave mt-2">la picá te estaba esperando</p>
+        <p className="text-xs text-tinta-suave mt-2">
+          ¿listo para una buena burguer?
+        </p>
       </header>
 
       <IniciarSesionForm googleEnabled={googleEnabled} />
 
-      <div className="flex-1" />
-
-      <p className="text-center text-xs text-tinta-suave mt-6">
+      <p className="text-center text-xs text-tinta-suave mt-5">
         ¿no tienes cuenta?{" "}
         <Link href="/registro" className="text-carbon font-semibold">
           crear cuenta
