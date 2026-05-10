@@ -41,7 +41,14 @@ import { recomputePlaceAggregates } from "../src/server/services/places";
 
 const APPLY = process.argv.includes("--apply");
 const DIST_M = 80;
-const SIM_MIN = 0.5;
+// Threshold de similitud (pg_trgm). Override via --min-sim 0.99 (más estricto,
+// solo nombres casi idénticos) o --min-sim 0.3 (más laxo, incluye typos).
+const SIM_MIN = (() => {
+  const idx = process.argv.indexOf("--min-sim");
+  if (idx === -1) return 0.5;
+  const v = parseFloat(process.argv[idx + 1] ?? "");
+  return Number.isFinite(v) ? v : 0.5;
+})();
 
 type CandidateRow = {
   a_id: string;
