@@ -684,31 +684,43 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: PostgreSQL `substring(text from 'pattern')` con POSIX regex captura grupos `()` directamente; `~*` es case-insensitive match. Útil para data fixes one-shot.
 - ✅ Lección: Google Places New API requiere fields explícitos en `X-Goog-FieldMask`. Pricing tier (Pro/Enterprise) depende de qué fields se piden. `includedType` + `strictTypeFiltering` filtran server-side mucho mejor que post-fetch.
 
+### Hecho en esta sesión (2026-05-11 sesión 7)
+
+#### Deploy / infra cerrado
+- ✅ Dominio `hambuscador.cl` operativo en Vercel. `AUTH_URL`, `NEXT_PUBLIC_SITE_URL` y `R2_PUBLIC_URL` (photos.hambuscador.cl) actualizados. Google OAuth + R2 CORS sumados. Admin bootstrapped en prod.
+- ✅ Migrations pendientes aplicadas en Neon (regions, comunas, resync-aggregates).
+
+#### Listas /picas expandidas a 16 regiones + sección "cerca tuyo"
+- ✅ De 5 listas (4 temáticas + Quillota) a 21 (5 temáticas nacionales + 16 regionales, una por región oficial). Nueva flagship `top-de-chile` con minRating 4.5. Quillota implícita en Valparaíso.
+- ✅ `searchPlaces` + `searchPlacesMock`: filtro `regionLabel` (match exacto a `places.region`). Sumar campo nuevo significa también actualizarlo en el score function si entra al match — acá NO entra al score, es filtro WHERE puro.
+- ✅ `PicasListCriteria`: `regionLabel?` + `comunaSlug` relajado de `ComunaSlug` enum a `string` (registry seed estaba stale con la tabla DB de 346 comunas).
+- ✅ `/picas` reorganizada en 3 secciones: "cerca tuyo" (1 card de la región detectada via cookie hb_geo + haversine al centroide más cercano), "para todos" (5 temáticas), "explorar Chile" (15 otras regiones, ocultas si count=0). Helpers nuevos en `lib/geo.ts`: `haversineKm` + `findClosestRegion`.
+- ✅ Sitemap + `generateStaticParams` iteran `PICAS_LISTS` → los 16 slugs nuevos entran automático sin tocar esos archivos.
+- ✅ Motivación monetización: más superficies regionales = más inventario de "destacado" para ads hiperlocales en el futuro. Cada región es su propio mercado.
+
+#### Recuperar password — bug fix
+- ✅ Fix: `src/app/recuperar/actions.ts` exportaba `RECOVERY_OK_MESSAGE` (string). Next 15 / React 19 rechaza en build de producción con `A "use server" file can only export async functions, found string`. Dev compilaba sin warning — solo prod estricto. Mensaje movido a `recuperar-form.tsx` (client side). Regla universal: **archivos `"use server"` solo pueden exportar async functions. Ni constantes, ni objetos, ni tipos `export type` (los tipos sí pasan porque son compile-time).**
+- ✅ Resend config en prod: dominio verificado es `nexofitness.cl` (sumar `hambuscador.cl` cuesta USD 20/mes adicional, se difiere). `RESEND_FROM_EMAIL = "Hambuscador <no-reply@nexofitness.cl>"` — display name "Hambuscador" en bandeja, envío legítimo desde dominio verificado.
+
+#### DX / lecciones
+- ✅ Lección: las server actions en Next 15 hacen POST a la URL de la página. El client error "An error occurred in the Server Components render" + digest cripta el mensaje real — siempre buscar el log de la function en Vercel (filtrar por digest) para ver el throw real, no quedarse con el mensaje del cliente.
+- ✅ Lección: cuando agregás envs en Vercel a producción, **hay que redeployar** para que la function las vea. Setear y refrescar no alcanza — el bundle ya está deployado sin ellas.
+- ✅ Lección: Resend (y cualquier transactional email) **falla silenciosa** cuando el FROM no está en un dominio verificado. La API tira 403 pero la action lo .catch() sin notificar al usuario para evitar email enumeration. Sin chequear Vercel logs o el Resend dashboard, parece que funciona — pero el email nunca sale. Patrón intencional; solo verificar logs ante quejas.
+
 ### Próximos pasos pendientes
 
-#### Deploy / infra (post compra del dominio)
-1. **Aplicar migrations en Neon prod** (orden importa, hay FK):
-   - `drizzle/2026-05-08-regions.sql` (16 regiones)
-   - `drizzle/2026-05-08-comunas.sql` (346 comunas, FK regions)
-   - `drizzle/2026-05-08-resync-aggregates.sql` (one-shot, recalcula rating excluyendo baneados)
-2. **Esperar propagación DNS** y verificar Vercel Domains marca ambos dominios verdes.
-3. **Actualizar env vars en Vercel** y redeployar:
-   - `AUTH_URL=https://hambuscador.cl`
-   - `NEXT_PUBLIC_SITE_URL=https://hambuscador.cl`
-   - `R2_PUBLIC_URL=https://photos.hambuscador.cl`
-4. **Google OAuth** → agregar redirect URI `https://hambuscador.cl/api/auth/callback/google` (mantener el `*.vercel.app` también).
-5. **R2 CORS** → agregar `https://hambuscador.cl` a `AllowedOrigins` (junto al localhost y vercel.app).
-6. **Bootstrap admin REAL en prod**: el owner se loguea con Google → en Neon SQL editor: `UPDATE users SET role = 'admin' WHERE email = 'contacto@nexosoftware.cl'` → cerrar sesión y reloguearse.
-7. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
+#### Deploy / infra
+1. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
+2. **Verificar `hambuscador.cl` en Resend** (cuando justifique el USD 20/mes) → cambiar `RESEND_FROM_EMAIL` a `no-reply@hambuscador.cl` para emails 100% on-brand.
 
 #### Código
 1. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
 2. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
-3. **Más listas curadas en /picas** según crezca el catálogo: por comuna específica, por horario nocturno, por temática. Hardcoded por ahora; mover a tabla `picas_lists` con CRUD admin cuando se justifique.
-4. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
-5. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
-6. **Resync URLs de fotos viejas** (cuando se decida): después de mover a `photos.hambuscador.cl`, las fotos en DB (places.photos[], reviews.photos[]) siguen apuntando al `pub-...r2.dev`. Backwards-compat OK por ahora; cuando se justifique, script SQL de reescritura.
-7. **Profundizar perfil público**: bio editable, avatar custom (hoy solo initials), badge de "verificado" para owners reclamados.
+3. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
+4. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
+5. **Resync URLs de fotos viejas**: las fotos en DB (places.photos[], reviews.photos[]) siguen apuntando al `pub-...r2.dev`. Backwards-compat OK por ahora; cuando se justifique, script SQL de reescritura a `photos.hambuscador.cl`.
+6. **Profundizar perfil público**: bio editable, avatar custom (hoy solo initials), badge de "verificado" para owners reclamados.
+7. **Más listas curadas /picas**: por comuna específica (Providencia, Las Condes), por horario nocturno, por temática. Mover a tabla `picas_lists` con CRUD admin cuando se justifique. Hoy hardcoded en `src/lib/picas.ts`.
 
 #### Fase 5 — engagement (parcialmente empezado)
 - ✅ Perfiles públicos `/u/[username]` con reseñas/favoritos/aportes
