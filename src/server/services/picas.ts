@@ -17,6 +17,7 @@ export async function getPlacesForPicasList(list: PicasList): Promise<Place[]> {
     cuisines: list.criteria.cuisines,
     priceRanges: list.criteria.priceRanges,
     comunaSlug: list.criteria.comunaSlug,
+    regionLabel: list.criteria.regionLabel,
     minBayesRating: list.criteria.minRating,
     approvedWithinDays: list.criteria.approvedWithinDays,
     sort: "popularity",

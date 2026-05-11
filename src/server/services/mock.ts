@@ -155,6 +155,7 @@ export function searchPlacesMock(
     cuisines?: string[];
     priceRanges?: string[];
     comunaSlug?: string;
+    regionLabel?: string;
     openNow?: boolean;
     sort?: "rating" | "recent" | "distance" | "popularity";
     userCoords?: { lat: number; lng: number };
@@ -170,9 +171,10 @@ export function searchPlacesMock(
     const matchesPrice =
       !filters?.priceRanges?.length || filters.priceRanges.includes(p.priceRange);
     const matchesComuna = !filters?.comunaSlug || p.comuna === filters.comunaSlug;
+    const matchesRegion = !filters?.regionLabel || p.region === filters.regionLabel;
     const matchesOpen =
       !filters?.openNow || p.status === "open" || p.status === "closing-soon";
-    return matchesCuisine && matchesPrice && matchesComuna && matchesOpen;
+    return matchesCuisine && matchesPrice && matchesComuna && matchesRegion && matchesOpen;
   });
 
   // 2. Grupos: cada grupo (con sus alternativas OR) tiene que matchear al

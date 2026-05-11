@@ -31,3 +31,38 @@ export function parseGeoCookie(value: string | undefined): GeoCoords | null {
 export function serializeGeoCookie(coords: GeoCoords): string {
   return `${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`;
 }
+
+/** Distancia haversine en km entre dos puntos. */
+export function haversineKm(a: GeoCoords, b: GeoCoords): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Dada una coord del usuario y un array de regiones con centroide, devuelve la
+ * más cercana. Aproximación: las regiones de Chile son alargadas pero el
+ * centroide funciona razonablemente para "en qué región estás" (UI sorting,
+ * no para validación estricta).
+ */
+export function findClosestRegion<T extends { lat: number; lng: number }>(
+  coords: GeoCoords,
+  regions: T[],
+): T | null {
+  if (regions.length === 0) return null;
+  let best: T | null = null;
+  let bestDist = Infinity;
+  for (const r of regions) {
+    const d = haversineKm(coords, { lat: r.lat, lng: r.lng });
+    if (d < bestDist) {
+      bestDist = d;
+      best = r;
+    }
+  }
+  return best;
+}

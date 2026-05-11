@@ -194,6 +194,8 @@ export type SearchResult = {
 export async function searchPlaces(opts: {
   query?: string;
   comunaSlug?: string;
+  /** Filtro por región (match exacto sobre `places.region`, ej. "Región Metropolitana"). */
+  regionLabel?: string;
   cuisines?: string[];
   priceRanges?: string[];
   openNow?: boolean;
@@ -210,6 +212,7 @@ export async function searchPlaces(opts: {
       cuisines: opts.cuisines,
       priceRanges: opts.priceRanges,
       comunaSlug: opts.comunaSlug,
+      regionLabel: opts.regionLabel,
       openNow: opts.openNow,
       sort: opts.sort,
       userCoords: opts.userCoords,
@@ -219,6 +222,7 @@ export async function searchPlaces(opts: {
   const {
     query,
     comunaSlug,
+    regionLabel,
     cuisines,
     priceRanges,
     openNow,
@@ -234,6 +238,7 @@ export async function searchPlaces(opts: {
   const baseConditions = [eq(places.moderationStatus, "approved")];
 
   if (comunaSlug) baseConditions.push(eq(places.comunaSlug, comunaSlug));
+  if (regionLabel) baseConditions.push(eq(places.region, regionLabel));
 
   if (cuisines && cuisines.length > 0) {
     const cuisineLiterals = sql.join(
