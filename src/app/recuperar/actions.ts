@@ -30,9 +30,6 @@ export type RequestState = {
   error?: string;
 };
 
-const GENERIC_OK_MSG =
-  "Si esa cuenta existe, te mandamos un link para crear una nueva contraseña. Revisa tu correo.";
-
 export async function requestPasswordReset(
   _prev: RequestState,
   formData: FormData,
@@ -68,8 +65,6 @@ export async function requestPasswordReset(
     return { ok: true };
   }
 }
-
-export const RECOVERY_OK_MESSAGE = GENERIC_OK_MSG;
 
 // ----------------------------------------------------------------------------
 

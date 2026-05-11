@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { RECOVERY_OK_MESSAGE, requestPasswordReset, type RequestState } from "./actions";
+import { requestPasswordReset, type RequestState } from "./actions";
+
+const RECOVERY_OK_MESSAGE =
+  "Si esa cuenta existe, te mandamos un link para crear una nueva contraseña. Revisa tu correo.";
 
 const initialState: RequestState = {};
 
