@@ -412,7 +412,7 @@ Hoy `createPlace` y `createReview` están escritos pero las Server Actions todav
 
 ## Cosas pendientes para la próxima sesión
 
-**Estado al 2026-05-09 (sesión 6)**: Fases 0-4 cerradas + Fase 5 inicial (perfiles públicos, reseñas compartibles). **Carga real de Chile completa**: 1.481 places en prod via Google Places API (USD 13). **Claim flow MVP completo**: owners reclaman, admin aprueba, owners editan via /mi-local. **Branding extendido**: pin/cluster del mapa son hamburguesas SVG, featured tomate sale del cluster, logo de marca admin-only en cards/OG. **Reseña card** clickable + badge fotos. Dominio `.cl` propagando a Vercel (operativo aún en `*.vercel.app`).
+**Estado al 2026-05-12 (sesión 8)**: Fases 0-4 cerradas + Fase 5 social completa. **Hambuscador.cl operativo** con Resend en dominio propio. **Engagement stack** entero live: notificaciones in-app (pull, hook en createReview de places reclamados), sistema de follows user→user con notif new_follower, Web Push con VAPID (toggle en /perfil, hook en createNotification, SW v2 con push handler). **Perfil profundizado**: bio + avatar custom subible al R2, fix de avatar Google que no se veía, JWT refresh sin relogin via `useSession().update()`. **Avatar en chrome** (Header home + tab perfil BottomNav). **PWA share target** GET — Hambuscador aparece en menú "Compartir" del SO, redirige a /agregar o /buscar según heurística. **Perf**: priority en cards LCP + Web Vitals reporter custom (sendBeacon → /api/vitals → stdout). **Search**: SYNONYMS expandidos con hamb/cheeseburger/celiaco/stgo/valpo, CSV export de /admin/search.
 
 ### Deploy actual
 
@@ -711,32 +711,67 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: cuando agregás envs en Vercel a producción, **hay que redeployar** para que la function las vea. Setear y refrescar no alcanza — el bundle ya está deployado sin ellas.
 - ✅ Lección: Resend (y cualquier transactional email) **falla silenciosa** cuando el FROM no está en un dominio verificado. La API tira 403 pero la action lo .catch() sin notificar al usuario para evitar email enumeration. Sin chequear Vercel logs o el Resend dashboard, parece que funciona — pero el email nunca sale. Patrón intencional; solo verificar logs ante quejas.
 
+### Hecho en esta sesión (2026-05-12 sesión 8)
+
+#### Engagement Fase 5 cerrado
+- ✅ **Notificaciones in-app** (pull-based, sin email-per-evento): tabla `notifications` con índices por user_id/created_at y parcial unread. Service en `src/server/services/notifications.ts` (createNotification, getNotificationsForUser, countUnread, markRead, markAllRead). Hook fire-and-forget post-tx en `createReview` para place reclamado (`notifyOwnerOfReview` — INNER JOIN places+users, skip si claimedBy null o == authorId). Página `/perfil/notificaciones` con `after()` deferred markAllRead. Badge tomate en `/perfil`. Tipos soportados: `review_on_owned_place`, `new_follower`.
+- ✅ **Sistema follows (user→user)**: tabla `follows` con PK compuesto + CHECK no-self + índice followee. Service `follows.ts`. Action `toggleFollowAction` lee `currentlyFollowing` del form pa ahorrar query. Botón seguir/siguiendo server-rendered en `/u/[username]` (cero JS), counts arriba del stats grid, pages `/u/[username]/seguidores` y `/siguiendo` con `<UserList>` compartido. Idempotente: `ON CONFLICT DO NOTHING` + check `inserted.length === 0` evita re-notificación cuando user hace re-follow.
+- ✅ **Web Push notifications**: dep `web-push` (~50KB), tabla `push_subscriptions` con upsert por endpoint, auto-cleanup en 404/410. SW v2 con handler `push` (showNotification con icon + tag) y `notificationclick` (focus tab existente y navigate, o openWindow). `<PushToggle />` client component en `/perfil` con estados loading/unsupported/denied/off/on/configuring. urlBase64ToUint8Array pa la VAPID key. Hook en `createNotification` dispara `sendPushToUser` fire-and-forget (skip si user sin subs o si VAPID env no seteado). VAPID: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT=https://hambuscador.cl`.
+
+#### Perfil público profundizado
+- ✅ **Bio + avatar custom**: schema ya tenía `users.bio` + `users.image`. Nueva `/perfil/editar` con bio textarea (max 280, counter live) + PhotoUploader max=1. Action con `imageMode` enum (`keep|new|remove`): editar bio NO borra foto. Boundary check: image debe ser del R2_PUBLIC_URL host. Botón "quitar foto actual" + deshacer.
+- ✅ **`<Avatar />` reusable** (`src/components/ui/avatar.tsx`): image con fallback a iniciales. Size dinámico via inline style (no clases Tailwind purgables). Reemplazó render manual en /perfil, /u/[username], reviews del detail, /r/[id], feed notif (con badge estrella overlay).
+- ✅ **Avatar de Google se ve**: `lh3.googleusercontent.com` agregado a `images.remotePatterns` en next.config.ts. Sin esto, next/image bloqueaba y se veía el alt "foto 1" del PhotoUploader que era pre-poblado con currentImage (bug visible al user). PhotoUploader ya NO se pre-puebla con currentImage — empieza vacío siempre, preview separado.
+- ✅ **JWT refresh sin relogin**: `SessionProvider` wrapping en root layout (server-rendered initial session, client-side `update()`). jwt callback en `src/server/auth.ts` maneja `trigger === "update"` y copia name/image al token. `EditProfileForm` cambió de redirect server-side a `state.ok → useSession().update() → router.push("/perfil")`.
+
+#### Avatar en el chrome de la app
+- ✅ **Header del home**: `avatarImage?: string | null` opcional. Avatar real (Google o R2 custom) en vez de iniciales.
+- ✅ **BottomNav split server/client** (`bottom-nav.tsx` server wrapper + `bottom-nav-client.tsx`). Server llama `auth()` y pasa `avatarImage`/`avatarInitials`. Tab "perfil" muestra avatar real con ring mostaza cuando activo — más reconocible que IconUser genérico.
+
+#### PWA / share target
+- ✅ Manifest declara `share_target` GET con title/text/url. Handler `/api/share/route.ts` heurística:
+  - URL Google Maps (maps.google, maps.app.goo.gl, goo.gl, google.com/maps, google.cl) → `/agregar?nombre=...` con title limpio de sufijo "- Comuna".
+  - Texto sin URL útil → `/buscar?q=...`.
+  - Empty → `/`.
+- ✅ Wizard `/agregar` acepta `?nombre=` (hasta 100 chars) para pre-fill. `AgregarWizard` toma `initialName?` opcional para el useState inicial del campo nombre.
+- ⏳ POST/multipart con files NO soportado — requiere SW listener + caché temporal de blobs. Diferido.
+
+#### Performance / observabilidad
+- ✅ **LCP fixes**: `PlaceCard` prop `priority` opcional → `priority + fetchPriority: high` en la Image, resto lazy default. Marcamos primera card de home, /buscar (lista + grupos) y /picas/[slug] rank=1.
+- ✅ **Web Vitals reporter**: `<WebVitals />` client component usa `useReportWebVitals` nativo de Next 15. Manda CLS/LCP/INP/FCP/TTFB con `sendBeacon` (fallback fetch keepalive) a `/api/vitals`. Endpoint logea estructurado a stdout (`[vitals] LCP 1850 good /`), retorna 204, cap defensivo 1KB. Solo activo en `NODE_ENV=production`. Filtrar Vercel function logs por `[vitals]` pa ver mediciones por path.
+
+#### Search
+- ✅ **SYNONYMS expandidos** (`src/lib/search.ts`): smashed/smashburger→smash, tradicional→clasica, fast→fastfood, celiaco→gluten, hamb/hamburguer/cheeseburger→burger, stgo/santi→santiago, valpo→valparaiso, conce→concepcion. STOP_WORDS sumadas: comida, lugar, local.
+- ✅ **CSV export en /admin/search**: route handler `/api/admin/search/export?type=popular|zerohits&days=N`. Auth-guarded admin role, hasta 1000 rows, filename con fecha. Botones "csv" en cada sección.
+
+#### Resend / dominio
+- ✅ **`hambuscador.cl` verificado en Resend** (DKIM/SPF en Cloudflare DNS only). `RESEND_FROM_EMAIL = "Hambuscador <no-reply@hambuscador.cl>"`. Migración desde `nexofitness.cl`. ⚠️ Rotar VAPID key + Resend API key si pasaron por chat/logs.
+
+#### DX / lecciones
+- ✅ Lección: next/image bloquea hosts no listados en `remotePatterns`. Cuando falla, muestra el alt como texto — confundible con un bug del feature. Lista vigente: R2_PUBLIC_URL host, `lh3.googleusercontent.com`, `images.unsplash.com`.
+- ✅ Lección: Web Share Target con files requiere POST multipart + SW listener — complejidad alta. GET con title/text/url cubre 90% de los casos UX (compartir desde Google Maps, notas, etc).
+- ✅ Lección: JWT cacheado en cliente NO refresca cambiar `users.image`/`users.name` en DB. Pattern Auth.js v5: `useSession().update({ user: { ... } })` dispara `trigger: "update"` en jwt callback. Requiere `<SessionProvider>` (next-auth/react) wrapping en root layout.
+- ✅ Lección: BottomNav split server/client cuando el cliente necesita data del session — server wrapper llama `auth()`, client recibe props y mantiene su lógica reactiva (usePathname).
+- ✅ Lección: Push web en iOS Safari requiere PWA instalada vía Add to Home Screen. Tab regular del browser NO recibe push.
+- ✅ Lección: re-follow no debe re-notificar. Pattern: `INSERT ... ON CONFLICT DO NOTHING RETURNING`, si la longitud retornada es 0 → ya seguía → no crear notification.
+
 ### Próximos pasos pendientes
 
 #### Deploy / infra
 1. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
-2. **Verificar `hambuscador.cl` en Resend** (cuando justifique el USD 20/mes) → cambiar `RESEND_FROM_EMAIL` a `no-reply@hambuscador.cl` para emails 100% on-brand.
+2. **VAPID keys generadas + en Vercel** — si todavía no se setearon `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`, el `<PushToggle />` queda oculto sin error UI. Generar en máquina segura: `node -e "console.log(require('web-push').generateVAPIDKeys())"`.
 
 #### Código
-1. **Service worker + JWT**: sesiones JWT existentes siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
-2. **Notificaciones para owner del local reclamado** (`claimedBy`): cuando alguien deja una reseña en su local. Patrón ok porque escala con N reseñas por owner, no global. Faltaría: tabla `notifications`, in-app feed, opt-in al email digest.
-3. **Sinónimos / mejoras de search informadas por `/admin/search`**: monitorear las queries zero-hit y populares; cada N días, traducir patrones reales a entradas nuevas en `src/lib/search.ts > SYNONYMS` o ajustes de pesos en `searchPlaces`. Loop de mejora continua.
-4. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG con quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar el tradeoff de bundle vs visual.
-5. **Resync URLs de fotos viejas**: las fotos en DB (places.photos[], reviews.photos[]) siguen apuntando al `pub-...r2.dev`. Backwards-compat OK por ahora; cuando se justifique, script SQL de reescritura a `photos.hambuscador.cl`.
-6. **Profundizar perfil público**: bio editable, avatar custom (hoy solo initials), badge de "verificado" para owners reclamados.
-7. **Más listas curadas /picas**: por comuna específica (Providencia, Las Condes), por horario nocturno, por temática. Mover a tabla `picas_lists` con CRUD admin cuando se justifique. Hoy hardcoded en `src/lib/picas.ts`.
-
-#### Fase 5 — engagement (parcialmente empezado)
-- ✅ Perfiles públicos `/u/[username]` con reseñas/favoritos/aportes
-- ✅ Compartir reseñas individuales `/r/[id]` con OG propio
-- ⏳ Notificaciones push (web + opcional email digest)
-- ⏳ Sistema de seguidores user → user
-- ⏳ Compartir vía deep links nativos (PWA share target)
+1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
+2. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar tradeoff bundle vs visual.
+3. **PWA share target POST/files**: hoy soportamos GET title/text/url. Para recibir fotos via share (caso: usuario en galería → comparte foto al wizard), agregar method:POST al manifest + SW listener que cachea blobs en Cache API y un endpoint que redirige al cliente que lee del cache.
+4. **Más listas curadas /picas**: por comuna específica (Providencia, Las Condes), por horario nocturno, por temática. Mover a tabla `picas_lists` con CRUD admin cuando se justifique.
+5. **Email digest opt-in** para notificaciones (batch diario/semanal, no per-evento). Hoy todo pull + push web.
+6. **Persistir Web Vitals**: hoy van a stdout, leíbles desde Vercel logs. Cuando se quiera trending, persistir en tabla `web_vitals` o forwardear a servicio (Plausible custom events, Datadog RUM).
 
 #### Optimización
-
-- **Core Web Vitals** target 90+ (PageSpeed Insights audit pendiente)
-- **Lighthouse PWA score** verificar que pasa toda la check (offline, installable, manifest)
+- **Core Web Vitals target 90+** (PageSpeed Insights baseline pendiente). Datos del reporter ya entran a Vercel logs.
+- **Lighthouse PWA score** verificar que pasa toda la check (offline, installable, manifest, share_target).
 
 ## Recursos
 
