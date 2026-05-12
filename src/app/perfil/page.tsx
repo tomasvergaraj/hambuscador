@@ -1,4 +1,5 @@
 import {
+  IconBell,
   IconBuildingStore,
   IconChevronRight,
   IconHeart,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
 import { getMyOwnedPlaces } from "@/server/services/claims";
+import { countUnreadNotifications } from "@/server/services/notifications";
 import { countPendingPlaces } from "@/server/services/places";
 import {
   getMyFavorites,
@@ -73,7 +75,7 @@ export default async function PerfilPage({
   // Pedimos stats + user (para username) + la lista de la tab activa.
   // Si es admin sumamos count de pendientes para el badge del shortcut.
   // ownedPlaces lista locales reclamados aprobados — atajo a editar.
-  const [stats, dbUser, list, pendingCount, ownedPlaces] = await Promise.all([
+  const [stats, dbUser, list, pendingCount, ownedPlaces, unreadCount] = await Promise.all([
     getUserStats(userId),
     getUserById(userId),
     tab === "resenas"
@@ -83,6 +85,7 @@ export default async function PerfilPage({
         : getMySubmissions(userId),
     isAdmin ? countPendingPlaces() : Promise.resolve(0),
     getMyOwnedPlaces(userId),
+    countUnreadNotifications(userId),
   ]);
 
   const showSubmittedBanner = nuevo === "1";
@@ -124,6 +127,39 @@ export default async function PerfilPage({
         </section>
 
         <UsernameSetter currentUsername={dbUser?.username ?? null} />
+
+        {/* Notificaciones — siempre visible. Badge tomate con count
+            cuando hay no leídas. Patrón pull: el user entra al feed
+            para "marcar como leído". */}
+        <Link
+          href="/perfil/notificaciones"
+          className="flex items-center gap-3 bg-crema-deep border border-crema-edge rounded-lg p-3 hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98] hover:shadow-md"
+        >
+          <div className="w-9 h-9 rounded-md bg-mostaza/15 text-mostaza-deep flex items-center justify-center shrink-0">
+            <IconBell size={18} aria-hidden="true" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-carbon">notificaciones</p>
+            <p className="text-[11px] text-bronceado">
+              {unreadCount > 0
+                ? `${unreadCount} sin leer`
+                : "estás al día"}
+            </p>
+          </div>
+          {unreadCount > 0 && (
+            <span
+              className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-[11px] font-medium bg-tomate text-crema rounded-full shrink-0"
+              aria-label={`${unreadCount} notificaciones sin leer`}
+            >
+              {unreadCount}
+            </span>
+          )}
+          <IconChevronRight
+            size={16}
+            className="text-bronceado shrink-0"
+            aria-hidden="true"
+          />
+        </Link>
 
         {/* Mis locales — visible si el user es owner verificado de al menos
             uno. Cada item linkea al editor restringido. */}

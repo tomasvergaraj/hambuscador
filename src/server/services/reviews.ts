@@ -4,6 +4,7 @@ import { getDb, isDbConfigured } from "@/server/db/client";
 import { places, reviews, users, type DbReview } from "@/server/db/schema";
 import type { Review } from "@/types/place";
 import { getReviewsByPlaceIdMock } from "./mock";
+import { createNotification } from "./notifications";
 import { recomputePlaceAggregates } from "./places";
 
 // ============================================================================
@@ -149,7 +150,71 @@ export async function createReview(input: {
   // Recompute fuera de la tx para mantenerla corta
   await recomputePlaceAggregates(input.placeId);
 
+  // Notificación al owner del local (si está reclamado y no es el mismo
+  // reviewer). Fire-and-forget: un error acá no debe romper la reseña que
+  // ya está commiteada en la DB.
+  void notifyOwnerOfReview({
+    placeId: input.placeId,
+    authorId: input.authorId,
+    reviewId: result.id,
+    rating: input.rating,
+    snippet: input.text ?? null,
+  }).catch((err) => {
+    console.error("[notifyOwnerOfReview]", err);
+  });
+
   return result;
+}
+
+/**
+ * Si el local está reclamado y el reviewer no es el owner, crea una
+ * notificación al owner. Lee place + user en una sola query (LEFT JOIN sobre
+ * places, INNER JOIN sobre el author para sacar el name/username).
+ */
+async function notifyOwnerOfReview(input: {
+  placeId: string;
+  authorId: string;
+  reviewId: string;
+  rating: number;
+  snippet: string | null;
+}): Promise<void> {
+  if (!isDbConfigured()) return;
+  const db = getDb();
+
+  const [row] = await db
+    .select({
+      placeId: places.id,
+      placeName: places.name,
+      placeSlug: places.slug,
+      comunaSlug: places.comunaSlug,
+      claimedBy: places.claimedBy,
+      authorName: users.name,
+      authorUsername: users.username,
+    })
+    .from(places)
+    .innerJoin(users, eq(users.id, input.authorId))
+    .where(eq(places.id, input.placeId))
+    .limit(1);
+
+  if (!row) return;
+  if (!row.claimedBy) return; // sin owner — nadie a quien avisar
+  if (row.claimedBy === input.authorId) return; // owner reseña su propio local — no spam
+
+  await createNotification({
+    userId: row.claimedBy,
+    type: "review_on_owned_place",
+    payload: {
+      placeId: row.placeId,
+      placeName: row.placeName,
+      placeSlug: row.placeSlug,
+      comunaSlug: row.comunaSlug,
+      reviewId: input.reviewId,
+      rating: input.rating,
+      reviewerName: row.authorName ?? "Anónimo",
+      reviewerUsername: row.authorUsername,
+      snippet: input.snippet ? input.snippet.slice(0, 140) : null,
+    },
+  });
 }
 
 export type PublicReview = {

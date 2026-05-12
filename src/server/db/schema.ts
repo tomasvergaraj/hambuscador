@@ -362,6 +362,46 @@ export const searchLogs = pgTable(
 );
 
 /**
+ * Notificaciones in-app por usuario destinatario. Patrón pull: el user las ve
+ * cuando entra a `/perfil/notificaciones` o ve el badge en `/perfil`. NO se
+ * envía email — la memoria del proyecto desaconseja escalar notificaciones
+ * linealmente (riesgo de spam viral). Email digest opt-in es futuro.
+ *
+ * `type` discrimina el shape del `payload`:
+ * - `review_on_owned_place`: `{ placeId, placeName, placeSlug, comunaSlug,
+ *   reviewId, rating, reviewerName, reviewerUsername, snippet }`
+ *
+ * `read_at` null = sin leer; setea al abrir feed o markRead.
+ *
+ * Migration: drizzle/2026-05-12-notifications.sql
+ */
+export const notificationTypeEnum = ["review_on_owned_place"] as const;
+export type NotificationType = (typeof notificationTypeEnum)[number];
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type", { enum: notificationTypeEnum }).notNull(),
+    payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userCreatedIdx: index("notifications_user_created_idx").on(
+      table.userId,
+      sql`${table.createdAt} DESC`,
+    ),
+    userUnreadIdx: index("notifications_user_unread_idx")
+      .on(table.userId)
+      .where(sql`${table.readAt} IS NULL`),
+  }),
+);
+
+/**
  * Tokens de recuperación de password. Una fila por solicitud. El `token`
  * es la clave (PK) — random 32 bytes hex (no se puede enumerar). El user
  * recibe un link `/recuperar/<token>` por email.
@@ -403,6 +443,8 @@ export type DbRegion = typeof regions.$inferSelect;
 export type DbComuna = typeof comunas.$inferSelect;
 export type DbPlaceClaim = typeof placeClaims.$inferSelect;
 export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type DbNotification = typeof notifications.$inferSelect;
+export type NewDbNotification = typeof notifications.$inferInsert;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;
