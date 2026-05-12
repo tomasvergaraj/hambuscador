@@ -403,6 +403,34 @@ export const notifications = pgTable(
 );
 
 /**
+ * Suscripciones de Web Push API por usuario. Un user puede tener varias subs
+ * (mobile + desktop, distintos browsers). El endpoint es la URL del push
+ * service del browser; única globalmente — si el browser re-suscribe sobre
+ * el mismo endpoint, hacemos upsert. `p256dh` y `auth` son las claves
+ * cripto que el browser provee para encriptar el payload.
+ *
+ * Migration: drizzle/2026-05-12-push-subscriptions.sql
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (table) => ({
+    userIdx: index("push_subscriptions_user_idx").on(table.userId),
+  }),
+);
+
+/**
  * Relación social follower → followee. PK compuesto evita duplicados; check
  * constraint impide auto-follow. El índice por followee_id es crítico para
  * listar followers de un user (la PK ya cubre lookups por follower_id).
@@ -471,6 +499,7 @@ export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type DbNotification = typeof notifications.$inferSelect;
 export type NewDbNotification = typeof notifications.$inferInsert;
 export type DbFollow = typeof follows.$inferSelect;
+export type DbPushSubscription = typeof pushSubscriptions.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

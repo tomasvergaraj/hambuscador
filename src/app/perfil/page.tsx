@@ -32,6 +32,7 @@ import {
   type MySubmissionItem,
 } from "@/server/services/users";
 import { signOutAction } from "./actions";
+import { PushToggle } from "./push-toggle";
 import { UsernameSetter } from "./username-setter";
 
 export const metadata = {
@@ -145,6 +146,10 @@ export default async function PerfilPage({
         </section>
 
         <UsernameSetter currentUsername={dbUser?.username ?? null} />
+
+        {/* Push web — opt-in. Solo renderiza si VAPID public está configurada
+            en el server y el browser soporta Notification + PushManager. */}
+        <PushToggle vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
 
         {/* Notificaciones — siempre visible. Badge tomate con count
             cuando hay no leídas. Patrón pull: el user entra al feed

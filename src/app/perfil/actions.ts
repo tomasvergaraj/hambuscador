@@ -6,6 +6,11 @@ import { z } from "zod";
 
 import { signOut, auth } from "@/server/auth";
 import {
+  removePushSubscription,
+  savePushSubscription,
+  type PushSubscriptionInput,
+} from "@/server/services/push";
+import {
   setUsername,
   updateUserProfile,
   UsernameTakenError,
@@ -113,4 +118,40 @@ export async function updateProfileAction(
   revalidatePath("/perfil");
   revalidatePath("/perfil/editar");
   redirect("/perfil");
+}
+
+/**
+ * Persiste una suscripción Web Push del browser. Llamada desde el cliente
+ * después de `pushManager.subscribe()`. Upsert por endpoint — re-subscribe
+ * del mismo browser actualiza en vez de duplicar.
+ */
+export async function subscribePushAction(input: {
+  sub: PushSubscriptionInput;
+  userAgent: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "no autorizado" };
+  try {
+    await savePushSubscription({
+      userId: session.user.id,
+      sub: input.sub,
+      userAgent: input.userAgent.slice(0, 500),
+    });
+    revalidatePath("/perfil");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "error desconocido" };
+  }
+}
+
+/**
+ * Borra una suscripción por endpoint. Llamada cuando el user desactiva el
+ * opt-in desde /perfil — el cliente también hace `pushSubscription.unsubscribe()`
+ * para limpiar del browser.
+ */
+export async function unsubscribePushAction(endpoint: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  await removePushSubscription(endpoint);
+  revalidatePath("/perfil");
 }

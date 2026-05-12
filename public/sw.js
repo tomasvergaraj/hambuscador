@@ -11,7 +11,7 @@
 // activar el SW nuevo.
 // =============================================================================
 
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE_HTML = `hb-html-${VERSION}`;
 const CACHE_STATIC = `hb-static-${VERSION}`;
 const CACHE_ASSETS = `hb-assets-${VERSION}`;
@@ -126,6 +126,56 @@ async function staleWhileRevalidate(req, cacheName) {
     .catch(() => cached || Response.error());
   return cached || fetchPromise;
 }
+
+// -----------------------------------------------------------------------------
+// Push notifications (Web Push API)
+// -----------------------------------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "hambuscador", body: event.data.text() };
+  }
+  const { title = "hambuscador", body = "", url = "/", tag, icon, badge } = payload;
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: icon || "/icon-192.png",
+      badge: badge || "/icon-192.png",
+      tag,
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification?.data?.url || "/perfil/notificaciones";
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Si ya hay tab del sitio abierto, lo enfocamos y navegamos.
+      for (const client of all) {
+        if (new URL(client.url).origin === self.location.origin) {
+          await client.focus();
+          if ("navigate" in client) {
+            try {
+              await client.navigate(targetUrl);
+            } catch {
+              /* algunas plataformas no permiten navigate cross-origin; ignorar */
+            }
+          }
+          return;
+        }
+      }
+      // Sino, abrimos una ventana nueva.
+      await self.clients.openWindow(targetUrl);
+    })(),
+  );
+});
 
 async function networkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);

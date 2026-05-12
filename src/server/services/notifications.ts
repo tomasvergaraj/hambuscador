@@ -6,6 +6,7 @@ import {
   type DbNotification,
   type NotificationType,
 } from "@/server/db/schema";
+import { sendPushToUser } from "./push";
 
 // ============================================================================
 // Payload shapes — un type por NotificationType. JSONB en DB es Record<string,
@@ -70,7 +71,54 @@ export async function createNotification<T extends NotificationType>(input: {
       payload: input.payload as Record<string, unknown>,
     })
     .returning();
+
+  // Dispara push web fire-and-forget. Si el user no opt-in a push, sendPushToUser
+  // no encuentra subs y sale temprano. Sin VAPID configurado también sale.
+  // En ningún caso bloquea la creación de la notif in-app.
+  void sendPushToUser(input.userId, buildPushPayload(input.type, input.payload)).catch(
+    (err) => {
+      console.error("[createNotification/push]", err);
+    },
+  );
+
   return row ?? null;
+}
+
+/**
+ * Genera el payload del push (title + body + url) a partir de la notif
+ * in-app. La URL relativa la maneja el SW: cuando el user clickea el push,
+ * abre `${origin}${url}`. Lo mantenemos chico — el push payload está limitado
+ * (4KB en Chrome, menor en otros).
+ */
+function buildPushPayload<T extends NotificationType>(
+  type: T,
+  payload: NotificationPayloadMap[T],
+): { title: string; body: string; url: string; tag: string } {
+  if (type === "review_on_owned_place") {
+    const p = payload as ReviewOnOwnedPlacePayload;
+    return {
+      title: `${p.reviewerName} reseñó ${p.placeName}`,
+      body: p.snippet ?? `${"★".repeat(p.rating)} en hambuscador`,
+      url: `/r/${p.reviewId}`,
+      tag: `review:${p.reviewId}`,
+    };
+  }
+  if (type === "new_follower") {
+    const p = payload as NewFollowerPayload;
+    return {
+      title: `${p.followerName} empezó a seguirte`,
+      body: p.followerUsername ? `@${p.followerUsername}` : "nuevo seguidor en hambuscador",
+      url: p.followerUsername ? `/u/${p.followerUsername}` : "/perfil/notificaciones",
+      tag: `follower:${p.followerId}`,
+    };
+  }
+  // Fallback (no debería ocurrir — el enum cubre todos los casos).
+  return {
+    title: "hambuscador",
+    body: "tienes una nueva notificación",
+    url: "/perfil/notificaciones",
+    tag: "default",
+  };
 }
 
 /**
