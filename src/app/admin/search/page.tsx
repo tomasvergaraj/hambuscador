@@ -1,5 +1,6 @@
 import {
   IconChartBar,
+  IconDownload,
   IconSearch,
   IconSearchOff,
   IconSparkles,
@@ -71,9 +72,12 @@ export default async function AdminSearchPage({
 
       {/* Top queries */}
       <section className="mb-8">
-        <h2 className="font-display font-semibold text-base text-carbon mb-2">
-          top queries
-        </h2>
+        <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+          <h2 className="font-display font-semibold text-base text-carbon">
+            top queries
+          </h2>
+          <ExportButton type="popular" days={days} />
+        </div>
         <p className="text-[11px] text-bronceado mb-3">
           ordenadas por cantidad. agregadas por versión normalizada (sin tildes
           ni mayúsculas).
@@ -83,9 +87,15 @@ export default async function AdminSearchPage({
 
       {/* Zero hits */}
       <section>
-        <h2 className="font-display font-semibold text-base text-carbon mb-2">
-          sin resultados <span className="text-bronceado font-normal text-xs">(últimos 30 días)</span>
-        </h2>
+        <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+          <h2 className="font-display font-semibold text-base text-carbon">
+            sin resultados{" "}
+            <span className="text-bronceado font-normal text-xs">
+              (últimos 30 días)
+            </span>
+          </h2>
+          <ExportButton type="zerohits" days={30} />
+        </div>
         <p className="text-[11px] text-bronceado mb-3">
           oro para nuevos sinónimos en{" "}
           <code className="font-mono bg-crema-deep px-1 rounded">
@@ -100,6 +110,24 @@ export default async function AdminSearchPage({
         />
       </section>
     </main>
+  );
+}
+
+function ExportButton({
+  type,
+  days,
+}: {
+  type: "popular" | "zerohits";
+  days: number;
+}) {
+  return (
+    <a
+      href={`/api/admin/search/export?type=${type}&days=${days}`}
+      className="inline-flex items-center gap-1 text-[11px] font-medium text-carbon bg-crema-deep border border-crema-edge rounded-full px-2.5 py-1 hover:bg-crema-edge transition-colors"
+    >
+      <IconDownload size={12} aria-hidden="true" />
+      csv
+    </a>
   );
 }
 

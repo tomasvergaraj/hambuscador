@@ -44,6 +44,10 @@ const STOP_WORDS = new Set([
   "mi",
   "tu",
   "su",
+  // Genéricos muy comunes que solo agregan ruido a la búsqueda
+  "comida",
+  "lugar",
+  "local",
 ]);
 
 /**
@@ -55,16 +59,52 @@ const STOP_WORDS = new Set([
  * Las claves y valores deben estar ya normalizados (ASCII lowercase).
  */
 const SYNONYMS: Record<string, string[]> = {
+  // ---------------------------------------------------------------------------
+  // Cocinas — los IDs canónicos están en constants.ts > CUISINES.
+  // ---------------------------------------------------------------------------
   veggie: ["vegetariana"],
   veggies: ["vegetariana"],
   vege: ["vegetariana"],
   vegan: ["vegana"],
+  // "americana" suele usarse como sinónimo de la burger clásica (tipo diner)
   americana: ["clasica"],
+  tradicional: ["clasica"],
+  // Variantes de "smash"
+  smashed: ["smash"],
+  smashburger: ["smash"],
+  smashburgers: ["smash"],
+  // Celiacos → cocina "sin gluten" (en places.cuisines como string completo;
+  // el token "gluten" matchea ese campo via ILIKE)
+  celiaco: ["gluten"],
+  celiaca: ["gluten"],
+  celiacos: ["gluten"],
+  celiacas: ["gluten"],
+  // "fast food" es 2 tokens — usuario suele escribirlo junto o solo "fast"
+  fast: ["fastfood"],
+  // ---------------------------------------------------------------------------
+  // Hamburguesa — variaciones del término base
+  // ---------------------------------------------------------------------------
   burguer: ["burger"],
+  hamburguer: ["burger"],
+  hamburger: ["burger"],
+  hamb: ["burger"],
   hamburguesa: ["burger"],
   hamburguesas: ["burger"],
-  // ñuñoa es un caso común que ya cubre el unaccent, pero alguno escribe "nunhoa"
+  cheeseburger: ["burger"],
+  cheeseburgers: ["burger"],
+  // ---------------------------------------------------------------------------
+  // Ubicaciones — typos y abreviaciones de ciudades/comunas chilenas
+  // ---------------------------------------------------------------------------
+  // ñuñoa: unaccent ya cubre Ñ → N; este sigue por typo común
   nunhoa: ["nunoa"],
+  // Santiago abreviado
+  stgo: ["santiago"],
+  santi: ["santiago"],
+  // Valparaíso
+  valpo: ["valparaiso"],
+  // Viña del Mar — el unaccent + ILIKE %token% ya hace que "vina" matchee.
+  // "Concepción" igual ("conce" matches via trigram).
+  conce: ["concepcion"],
 };
 
 /**
