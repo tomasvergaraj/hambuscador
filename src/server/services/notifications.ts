@@ -20,6 +20,7 @@ export type ReviewOnOwnedPlacePayload = {
   reviewId: string;
   rating: number;
   reviewerName: string;
+  reviewerImage: string | null;
   reviewerUsername: string | null;
   snippet: string | null;
 };

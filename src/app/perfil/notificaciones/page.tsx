@@ -5,6 +5,8 @@ import { after } from "next/server";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
+import { Avatar } from "@/components/ui/avatar";
+import { initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
 import {
   getNotificationsForUser,
@@ -98,8 +100,20 @@ function ReviewOnOwnedPlaceCard({
           : "bg-crema-deep border-crema-edge hover:border-mostaza/40",
       ].join(" ")}
     >
-      <div className="w-9 h-9 shrink-0 rounded-full bg-mostaza text-carbon flex items-center justify-center mt-0.5">
-        <IconStarFilled size={18} aria-hidden="true" />
+      <div className="relative shrink-0 mt-0.5">
+        <Avatar
+          image={p.reviewerImage}
+          initials={initialsFromName(p.reviewerName)}
+          size={36}
+          className="bg-mostaza-deep text-carbon text-xs"
+          alt={`avatar de ${p.reviewerName}`}
+        />
+        <span
+          aria-hidden="true"
+          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-mostaza text-carbon border-2 border-crema-deep flex items-center justify-center"
+        >
+          <IconStarFilled size={9} />
+        </span>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-carbon leading-snug">

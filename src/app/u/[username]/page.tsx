@@ -9,6 +9,7 @@ import { notFound } from "next/navigation";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
+import { Avatar } from "@/components/ui/avatar";
 import { cn, initialsFromName } from "@/lib/utils";
 import {
   getMyFavorites,
@@ -95,16 +96,20 @@ export default async function UserProfilePage({
 
       <main className="px-4 pt-4 flex-1 flex flex-col gap-4">
         <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center font-display font-semibold text-lg">
-            {initials}
-          </div>
+          <Avatar
+            image={user.image}
+            initials={initials}
+            size={56}
+            className="bg-mostaza-deep text-carbon font-display font-semibold"
+            alt={`avatar de ${displayName}`}
+          />
           <div className="flex-1 min-w-0">
             <p className="font-display font-semibold text-base text-carbon truncate">
               {displayName}
             </p>
             <p className="text-xs text-tinta-suave">miembro desde {memberSince}</p>
             {user.bio ? (
-              <p className="text-xs text-tinta-suave mt-1 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-tinta-suave mt-1 line-clamp-3 leading-relaxed whitespace-pre-line">
                 {user.bio}
               </p>
             ) : null}

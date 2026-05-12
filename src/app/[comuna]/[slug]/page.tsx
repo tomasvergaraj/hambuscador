@@ -21,6 +21,7 @@ import { notFound } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
 
 import { PhotoCarousel } from "@/components/place/photo-carousel";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -334,9 +335,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                     href={`/u/${mine.authorUsername}`}
                     className="relative z-20 flex items-center gap-2 hover:opacity-80 transition-opacity"
                   >
-                    <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
-                      {mine.authorInitials}
-                    </div>
+                    <Avatar
+                      image={mine.authorImage}
+                      initials={mine.authorInitials}
+                      size={28}
+                      className="bg-mostaza text-carbon text-[10px]"
+                      alt={`avatar de ${mine.authorName}`}
+                    />
                     <div>
                       <p className="text-xs font-medium text-carbon">
                         {mine.authorName}
@@ -348,9 +353,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                   </Link>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-mostaza text-carbon flex items-center justify-center text-[10px] font-medium">
-                      {mine.authorInitials}
-                    </div>
+                    <Avatar
+                      image={mine.authorImage}
+                      initials={mine.authorInitials}
+                      size={28}
+                      className="bg-mostaza text-carbon text-[10px]"
+                      alt={`avatar de ${mine.authorName}`}
+                    />
                     <div>
                       <p className="text-xs font-medium text-carbon">{mine.authorName}</p>
                       <p className="text-[10px] text-bronceado">
@@ -426,9 +435,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                         href={`/u/${review.authorUsername}`}
                         className="relative z-20 flex items-center gap-2 hover:opacity-80 transition-opacity"
                       >
-                        <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
-                          {review.authorInitials}
-                        </div>
+                        <Avatar
+                          image={review.authorImage}
+                          initials={review.authorInitials}
+                          size={28}
+                          className="bg-lechuga text-crema-deep text-[10px]"
+                          alt={`avatar de ${review.authorName}`}
+                        />
                         <div>
                           <p className="text-xs font-medium text-carbon">
                             {review.authorName}
@@ -440,9 +453,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                       </Link>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-[10px] font-medium">
-                          {review.authorInitials}
-                        </div>
+                        <Avatar
+                          image={review.authorImage}
+                          initials={review.authorInitials}
+                          size={28}
+                          className="bg-lechuga text-crema-deep text-[10px]"
+                          alt={`avatar de ${review.authorName}`}
+                        />
                         <div>
                           <p className="text-xs font-medium text-carbon">
                             {review.authorName}

@@ -186,6 +186,27 @@ export async function setUsername(userId: string, raw: string): Promise<void> {
     .where(eq(users.id, userId));
 }
 
+/**
+ * Actualiza bio + image (avatar) del usuario. La validación de longitud +
+ * sanitización de URL viven en la server action; este service confía en
+ * recibir input ya validado. Pasar `null` borra el campo.
+ */
+export async function updateUserProfile(
+  userId: string,
+  input: { bio?: string | null; image?: string | null },
+): Promise<void> {
+  if (!isDbConfigured()) throw new Error("updateUserProfile requiere DATABASE_URL");
+  const db = getDb();
+
+  const patch: Partial<{ bio: string | null; image: string | null; updatedAt: Date }> = {
+    updatedAt: new Date(),
+  };
+  if (input.bio !== undefined) patch.bio = input.bio;
+  if (input.image !== undefined) patch.image = input.image;
+
+  await db.update(users).set(patch).where(eq(users.id, userId));
+}
+
 export type UserStats = {
   reviewCount: number;
   favoriteCount: number;

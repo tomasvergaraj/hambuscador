@@ -26,6 +26,7 @@ function dbReviewToUi(row: DbReviewWithAuthor): Review {
     authorId: row.authorId,
     authorName: name,
     authorInitials: initials,
+    authorImage: row.authorImage,
     authorUsername: row.authorUsername,
     rating: row.rating,
     ratingsByAspect: {
@@ -189,6 +190,7 @@ async function notifyOwnerOfReview(input: {
       comunaSlug: places.comunaSlug,
       claimedBy: places.claimedBy,
       authorName: users.name,
+      authorImage: users.image,
       authorUsername: users.username,
     })
     .from(places)
@@ -211,6 +213,7 @@ async function notifyOwnerOfReview(input: {
       reviewId: input.reviewId,
       rating: input.rating,
       reviewerName: row.authorName ?? "Anónimo",
+      reviewerImage: row.authorImage,
       reviewerUsername: row.authorUsername,
       snippet: input.snippet ? input.snippet.slice(0, 140) : null,
     },
@@ -227,6 +230,7 @@ export type PublicReview = {
     id: string;
     name: string;
     initials: string;
+    image: string | null;
     username: string | null;
   };
   place: {
@@ -256,6 +260,7 @@ export async function getReviewById(reviewId: string): Promise<PublicReview | nu
       createdAt: reviews.createdAt,
       authorId: users.id,
       authorName: users.name,
+      authorImage: users.image,
       authorUsername: users.username,
       authorBannedAt: users.bannedAt,
       placeId: places.id,
@@ -284,6 +289,7 @@ export async function getReviewById(reviewId: string): Promise<PublicReview | nu
       id: row.authorId,
       name,
       initials: computeInitials(name),
+      image: row.authorImage,
       username: row.authorUsername,
     },
     place: {

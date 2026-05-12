@@ -5,6 +5,7 @@ import {
   IconHeart,
   IconLayoutDashboard,
   IconLogout,
+  IconPencil,
   IconRosetteDiscountCheckFilled,
   IconStar,
 } from "@tabler/icons-react";
@@ -13,6 +14,7 @@ import { redirect } from "next/navigation";
 
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
@@ -115,15 +117,31 @@ export default async function PerfilPage({
 
         {/* Tarjeta de identidad */}
         <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center font-display font-semibold text-lg">
-            {initials}
-          </div>
+          <Avatar
+            image={dbUser?.image ?? null}
+            initials={initials}
+            size={56}
+            className="bg-mostaza-deep text-carbon font-display font-semibold"
+            alt={`avatar de ${name}`}
+          />
           <div className="flex-1 min-w-0">
             <p className="font-display font-semibold text-base text-carbon truncate">{name}</p>
             {email ? (
               <p className="text-xs text-tinta-suave truncate">{email}</p>
             ) : null}
+            {dbUser?.bio ? (
+              <p className="text-xs text-tinta-suave mt-1 line-clamp-2 leading-relaxed">
+                {dbUser.bio}
+              </p>
+            ) : null}
           </div>
+          <Link
+            href="/perfil/editar"
+            aria-label="editar perfil"
+            className="self-start flex items-center justify-center w-8 h-8 rounded-md text-tinta-suave hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-90 shrink-0"
+          >
+            <IconPencil size={15} aria-hidden="true" />
+          </Link>
         </section>
 
         <UsernameSetter currentUsername={dbUser?.username ?? null} />

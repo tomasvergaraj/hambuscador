@@ -54,6 +54,8 @@ export type Review = {
   authorId: string;
   authorName: string;
   authorInitials: string;
+  /** URL del avatar (R2). null si el autor no subió foto. */
+  authorImage: string | null;
   /** Username público del autor para linkear a `/u/<username>`. null si el
    * autor todavía no eligió uno. */
   authorUsername: string | null;

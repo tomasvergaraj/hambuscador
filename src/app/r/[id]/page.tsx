@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
 import { ShareButton } from "@/components/place/share-button";
+import { Avatar } from "@/components/ui/avatar";
 import { getReviewById } from "@/lib/data";
 
 // ============================================================================
@@ -68,9 +69,13 @@ export default async function ReviewPage({
                 href={`/u/${review.author.username}`}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
-                <div className="w-9 h-9 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-xs font-medium">
-                  {review.author.initials}
-                </div>
+                <Avatar
+                  image={review.author.image}
+                  initials={review.author.initials}
+                  size={36}
+                  className="bg-lechuga text-crema-deep"
+                  alt={`avatar de ${review.author.name}`}
+                />
                 <div>
                   <p className="text-sm font-medium text-carbon">
                     {review.author.name}
@@ -82,9 +87,13 @@ export default async function ReviewPage({
               </Link>
             ) : (
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-full bg-lechuga text-crema-deep flex items-center justify-center text-xs font-medium">
-                  {review.author.initials}
-                </div>
+                <Avatar
+                  image={review.author.image}
+                  initials={review.author.initials}
+                  size={36}
+                  className="bg-lechuga text-crema-deep"
+                  alt={`avatar de ${review.author.name}`}
+                />
                 <div>
                   <p className="text-sm font-medium text-carbon">
                     {review.author.name}
