@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
 
+import { SessionProvider } from "@/components/auth/session-provider";
 import { PwaInstaller } from "@/components/pwa/pwa-installer";
+import { auth } from "@/server/auth";
 
 import "./globals.css";
 
@@ -76,16 +78,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Hidratamos la sesión inicial en el server para que el SessionProvider
+  // del cliente no haga un round-trip extra al montar. useSession().update(...)
+  // sigue funcionando después de eso para refrescar el JWT.
+  const session = await auth();
   return (
     <html lang="es" className={`${bricolage.variable} ${geist.variable}`}>
       <body>
-        {children}
-        <PwaInstaller />
+        <SessionProvider session={session}>
+          {children}
+          <PwaInstaller />
+        </SessionProvider>
       </body>
     </html>
   );

@@ -118,12 +118,20 @@ export const authConfig: NextAuthConfig = {
       if (banned) return false;
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         // OAuth flows (Google) ya traen el row completo del adapter; Credentials
         // lo seteamos arriba en authorize. Default 'user' por seguridad.
         token.role = (user as { role?: "user" | "admin" }).role ?? "user";
+      }
+      // Cliente llamó useSession().update({ user: { name, image } }) — refrescamos
+      // los campos mutables del token. Useful después de editar perfil: sin esto
+      // el header/bottom-nav siguen con el avatar viejo hasta relogin.
+      if (trigger === "update" && session?.user) {
+        const u = session.user as { name?: string | null; image?: string | null };
+        if (u.name !== undefined) token.name = u.name ?? undefined;
+        if (u.image !== undefined) token.picture = u.image ?? undefined;
       }
       return token;
     },

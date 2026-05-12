@@ -1,6 +1,8 @@
 "use client";
 
 import { IconTrash } from "@tabler/icons-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Avatar } from "@/components/ui/avatar";
@@ -38,10 +40,29 @@ export function EditProfileForm({ name, currentBio, currentImage }: Props) {
     updateProfileAction,
     initial,
   );
+  const router = useRouter();
+  const { update } = useSession();
 
   const [bio, setBio] = React.useState(currentBio ?? "");
   const [uploaded, setUploaded] = React.useState<string[]>([]);
   const [removeRequested, setRemoveRequested] = React.useState(false);
+
+  // Cuando la action vuelve con ok, refrescamos el JWT con el image nuevo
+  // (si cambió) y navegamos a /perfil. Sin esto el header/bottom-nav se
+  // quedarían con el avatar viejo hasta el próximo login.
+  React.useEffect(() => {
+    if (!state.ok) return;
+    let cancelled = false;
+    (async () => {
+      if (state.image !== undefined) {
+        await update({ user: { image: state.image } });
+      }
+      if (!cancelled) router.push("/perfil");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.ok, state.image, update, router]);
 
   const initials = initialsFromName(name);
   const newImage = uploaded[0] ?? null;

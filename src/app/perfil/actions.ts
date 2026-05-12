@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { signOut, auth } from "@/server/auth";
@@ -60,7 +59,14 @@ const updateProfileSchema = z.object({
   image: z.string().url().optional().or(z.literal("")),
 });
 
-export type UpdateProfileState = { error?: string; ok?: boolean };
+export type UpdateProfileState = {
+  error?: string;
+  ok?: boolean;
+  /** Imagen final post-update (null si quedó sin foto). El client la usa
+   *  para llamar `useSession().update({ user: { image } })` y refrescar el
+   *  JWT, así el header/bottom-nav muestran el avatar nuevo sin relogin. */
+  image?: string | null;
+};
 
 /**
  * Edita bio + avatar del usuario.
@@ -117,7 +123,21 @@ export async function updateProfileAction(
 
   revalidatePath("/perfil");
   revalidatePath("/perfil/editar");
-  redirect("/perfil");
+
+  // En vez de redirect aquí, devolvemos el estado final para que el client
+  // dispare `useSession().update(...)` y refresque el JWT antes de navegar.
+  // El client redirige al ver `ok: true`.
+  const finalImage =
+    parsed.data.imageMode === "remove"
+      ? null
+      : parsed.data.imageMode === "new"
+        ? (patch.image ?? null)
+        : undefined; // keep: que el client deje el image como estaba
+
+  return {
+    ok: true,
+    image: finalImage === undefined ? undefined : finalImage,
+  };
 }
 
 /**
