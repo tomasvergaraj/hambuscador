@@ -51,16 +51,22 @@ const updateProfileSchema = z.object({
     .string()
     .max(BIO_MAX, `La bio no puede tener más de ${BIO_MAX} caracteres`)
     .optional(),
+  imageMode: z.enum(["keep", "new", "remove"]).default("keep"),
   image: z.string().url().optional().or(z.literal("")),
 });
 
 export type UpdateProfileState = { error?: string; ok?: boolean };
 
 /**
- * Edita bio + avatar del usuario. La URL del avatar viene del flow de upload
- * directo a R2 (PhotoUploader → requestUploadUrl → PUT). Validamos que el
- * host pertenezca al bucket público — defensive boundary contra el caso de
- * que el form mande otra URL.
+ * Edita bio + avatar del usuario.
+ *
+ * `imageMode` discrimina el intent del client:
+ *   - keep: no tocar image (default, ej. user solo editó bio)
+ *   - new: subió foto al R2 → guardar la URL del campo `image`
+ *   - remove: pidió quitar foto → setear a null (cae a iniciales)
+ *
+ * La URL del avatar (en modo `new`) debe ser del bucket R2 público — boundary
+ * defensivo contra el caso de que el form mande otra URL.
  */
 export async function updateProfileAction(
   _prev: UpdateProfileState,
@@ -71,27 +77,35 @@ export async function updateProfileAction(
 
   const parsed = updateProfileSchema.safeParse({
     bio: String(formData.get("bio") ?? ""),
+    imageMode: String(formData.get("imageMode") ?? "keep"),
     image: String(formData.get("image") ?? ""),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
 
-  // Normalizamos cadenas vacías a null (borrar el campo).
   const bioTrimmed = parsed.data.bio?.trim();
   const bio: string | null = bioTrimmed ? bioTrimmed : null;
-  const imageRaw = parsed.data.image?.trim() ?? "";
-  let image: string | null = null;
-  if (imageRaw) {
+
+  // Image solo se incluye en el patch si el user lo cambió. updateUserProfile
+  // ignora keys ausentes en el input.
+  const patch: { bio: string | null; image?: string | null } = { bio };
+  if (parsed.data.imageMode === "remove") {
+    patch.image = null;
+  } else if (parsed.data.imageMode === "new") {
+    const imageRaw = parsed.data.image?.trim() ?? "";
+    if (!imageRaw) {
+      return { error: "Falta la URL del avatar" };
+    }
     const expected = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
     if (expected && !imageRaw.startsWith(expected)) {
       return { error: "URL de avatar no válida" };
     }
-    image = imageRaw;
+    patch.image = imageRaw;
   }
 
   try {
-    await updateUserProfile(session.user.id, { bio, image });
+    await updateUserProfile(session.user.id, patch);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Error desconocido" };
   }

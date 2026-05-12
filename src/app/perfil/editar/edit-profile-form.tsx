@@ -1,8 +1,9 @@
 "use client";
 
+import { IconTrash } from "@tabler/icons-react";
 import * as React from "react";
-import Image from "next/image";
 
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PhotoUploader } from "@/components/place/photo-uploader";
 import { initialsFromName } from "@/lib/utils";
@@ -19,9 +20,18 @@ type Props = {
 };
 
 /**
- * Form para editar bio + avatar. Avatar va por R2 (PhotoUploader max=1).
- * Hidden inputs mirroran el state al action server-side. Redirige a /perfil
- * al guardar exitoso (el action redirige; el client no necesita reaccionar).
+ * Form para editar bio + avatar.
+ *
+ * El avatar tiene 3 modos que se envían vía `imageMode` al action:
+ *   - keep: no toca image (default si user no interactúa con avatar)
+ *   - new: subió foto al R2 → action guarda la URL nueva
+ *   - remove: clicked quitar → action setea null (vuelve a iniciales)
+ *
+ * El PhotoUploader empieza vacío SIEMPRE — su rol es subir, no mostrar la
+ * actual. La actual va en preview separado arriba. Esto evita que el alt
+ * "foto 1" se vea cuando la imagen no carga (ej. Google avatar con CSP
+ * restrictiva). El Avatar component sí soporta cualquier URL configurada en
+ * next.config.remotePatterns y cae a iniciales si la imagen falla.
  */
 export function EditProfileForm({ name, currentBio, currentImage }: Props) {
   const [state, formAction, pending] = React.useActionState(
@@ -30,12 +40,19 @@ export function EditProfileForm({ name, currentBio, currentImage }: Props) {
   );
 
   const [bio, setBio] = React.useState(currentBio ?? "");
-  const [images, setImages] = React.useState<string[]>(
-    currentImage ? [currentImage] : [],
-  );
+  const [uploaded, setUploaded] = React.useState<string[]>([]);
+  const [removeRequested, setRemoveRequested] = React.useState(false);
 
-  const previewUrl = images[0] ?? currentImage ?? null;
   const initials = initialsFromName(name);
+  const newImage = uploaded[0] ?? null;
+
+  // Preview prioriza foto nueva, después la actual (si no se pidió borrar).
+  const previewImage = newImage ?? (removeRequested ? null : currentImage);
+
+  const imageMode = newImage ? "new" : removeRequested ? "remove" : "keep";
+  const showRemove = Boolean(currentImage) && !newImage && !removeRequested;
+  const showUndoRemove = removeRequested && !newImage;
+
   const remaining = BIO_MAX - bio.length;
   const nearLimit = remaining < 30;
 
@@ -43,22 +60,37 @@ export function EditProfileForm({ name, currentBio, currentImage }: Props) {
     <form action={formAction} className="flex flex-col gap-5">
       {/* Avatar preview + uploader */}
       <section className="flex flex-col items-center gap-3">
-        <div className="w-24 h-24 rounded-full overflow-hidden bg-mostaza-deep text-carbon flex items-center justify-center font-display font-semibold text-2xl relative border-2 border-crema-edge">
-          {previewUrl ? (
-            <Image
-              src={previewUrl}
-              alt="tu avatar"
-              fill
-              sizes="96px"
-              className="object-cover"
-            />
-          ) : (
-            <span>{initials}</span>
-          )}
-        </div>
+        <Avatar
+          image={previewImage}
+          initials={initials}
+          size={96}
+          className="bg-mostaza-deep text-carbon font-display font-semibold border-2 border-crema-edge"
+          alt={`avatar de ${name}`}
+        />
 
-        <PhotoUploader value={images} onChange={setImages} max={1} />
-        <input type="hidden" name="image" value={images[0] ?? ""} />
+        <PhotoUploader value={uploaded} onChange={setUploaded} max={1} />
+
+        {showRemove && (
+          <button
+            type="button"
+            onClick={() => setRemoveRequested(true)}
+            className="inline-flex items-center gap-1 text-[11px] text-tomate hover:opacity-80 transition-opacity"
+          >
+            <IconTrash size={12} aria-hidden="true" /> quitar foto actual
+          </button>
+        )}
+        {showUndoRemove && (
+          <button
+            type="button"
+            onClick={() => setRemoveRequested(false)}
+            className="text-[11px] text-tinta-suave hover:text-carbon transition-colors"
+          >
+            deshacer
+          </button>
+        )}
+
+        <input type="hidden" name="imageMode" value={imageMode} />
+        <input type="hidden" name="image" value={newImage ?? ""} />
       </section>
 
       {/* Bio textarea */}

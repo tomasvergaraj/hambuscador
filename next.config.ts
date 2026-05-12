@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
+      // Avatares de Google OAuth (login con Google guarda picture URL del IDP)
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
       ...(r2Pattern ? [r2Pattern] : []),
     ],
   },
