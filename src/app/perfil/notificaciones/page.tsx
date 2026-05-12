@@ -1,4 +1,4 @@
-import { IconBell, IconStarFilled } from "@tabler/icons-react";
+import { IconBell, IconStarFilled, IconUserPlus } from "@tabler/icons-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -11,6 +11,7 @@ import { auth } from "@/server/auth";
 import {
   getNotificationsForUser,
   markAllNotificationsRead,
+  type NewFollowerPayload,
   type NotificationItem,
   type ReviewOnOwnedPlacePayload,
 } from "@/server/services/notifications";
@@ -60,7 +61,8 @@ function EmptyFeed() {
         sin notificaciones todavía.
       </p>
       <p className="text-xs text-bronceado mt-1.5 leading-relaxed">
-        cuando alguien deje una reseña en un local que reclamaste, te avisamos acá.
+        cuando alguien empiece a seguirte o deje una reseña en un local que
+        reclamaste, te avisamos acá.
       </p>
     </div>
   );
@@ -80,7 +82,64 @@ function renderNotification(n: NotificationItem) {
   if (n.type === "review_on_owned_place") {
     return <ReviewOnOwnedPlaceCard n={n as NotificationItem<"review_on_owned_place">} />;
   }
+  if (n.type === "new_follower") {
+    return <NewFollowerCard n={n as NotificationItem<"new_follower">} />;
+  }
   return null;
+}
+
+function NewFollowerCard({ n }: { n: NotificationItem<"new_follower"> }) {
+  const p = n.payload as NewFollowerPayload;
+  const unread = !n.readAt;
+  const href = p.followerUsername ? `/u/${p.followerUsername}` : "/perfil/notificaciones";
+
+  const inner = (
+    <>
+      <div className="relative shrink-0 mt-0.5">
+        <Avatar
+          image={p.followerImage}
+          initials={initialsFromName(p.followerName)}
+          size={36}
+          className="bg-mostaza-deep text-carbon text-xs"
+          alt={`avatar de ${p.followerName}`}
+        />
+        <span
+          aria-hidden="true"
+          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-mostaza text-carbon border-2 border-crema-deep flex items-center justify-center"
+        >
+          <IconUserPlus size={10} stroke={2.5} />
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-carbon leading-snug">
+          <span className="font-medium">{p.followerName}</span>{" "}
+          empezó a seguirte
+          {p.followerUsername ? (
+            <span className="text-bronceado"> · @{p.followerUsername}</span>
+          ) : null}
+        </p>
+        <p className="text-[10px] text-bronceado mt-1.5">
+          hace {timeAgo(n.createdAt)}
+        </p>
+      </div>
+    </>
+  );
+
+  const className = [
+    "flex gap-3 rounded-lg p-3 border transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98] hover:shadow-md",
+    unread
+      ? "bg-mostaza/10 border-mostaza/40 hover:bg-mostaza/15"
+      : "bg-crema-deep border-crema-edge hover:border-mostaza/40",
+  ].join(" ");
+
+  if (p.followerUsername) {
+    return (
+      <Link href={href} className={className}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={className}>{inner}</div>;
 }
 
 function ReviewOnOwnedPlaceCard({

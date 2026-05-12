@@ -369,13 +369,14 @@ export const searchLogs = pgTable(
  *
  * `type` discrimina el shape del `payload`:
  * - `review_on_owned_place`: `{ placeId, placeName, placeSlug, comunaSlug,
- *   reviewId, rating, reviewerName, reviewerUsername, snippet }`
+ *   reviewId, rating, reviewerName, reviewerImage, reviewerUsername, snippet }`
+ * - `new_follower`: `{ followerId, followerName, followerImage, followerUsername }`
  *
  * `read_at` null = sin leer; setea al abrir feed o markRead.
  *
  * Migration: drizzle/2026-05-12-notifications.sql
  */
-export const notificationTypeEnum = ["review_on_owned_place"] as const;
+export const notificationTypeEnum = ["review_on_owned_place", "new_follower"] as const;
 export type NotificationType = (typeof notificationTypeEnum)[number];
 
 export const notifications = pgTable(
@@ -398,6 +399,30 @@ export const notifications = pgTable(
     userUnreadIdx: index("notifications_user_unread_idx")
       .on(table.userId)
       .where(sql`${table.readAt} IS NULL`),
+  }),
+);
+
+/**
+ * Relación social follower → followee. PK compuesto evita duplicados; check
+ * constraint impide auto-follow. El índice por followee_id es crítico para
+ * listar followers de un user (la PK ya cubre lookups por follower_id).
+ *
+ * Migration: drizzle/2026-05-12-follows.sql
+ */
+export const follows = pgTable(
+  "follows",
+  {
+    followerId: uuid("follower_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followeeId: uuid("followee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.followerId, table.followeeId] }),
+    followeeIdx: index("follows_followee_idx").on(table.followeeId),
   }),
 );
 
@@ -445,6 +470,7 @@ export type DbPlaceClaim = typeof placeClaims.$inferSelect;
 export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type DbNotification = typeof notifications.$inferSelect;
 export type NewDbNotification = typeof notifications.$inferInsert;
+export type DbFollow = typeof follows.$inferSelect;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

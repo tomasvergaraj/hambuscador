@@ -3,6 +3,8 @@ import {
   IconChevronRight,
   IconHeart,
   IconStar,
+  IconUserCheck,
+  IconUserPlus,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,7 +12,10 @@ import { notFound } from "next/navigation";
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { Header } from "@/components/nav/header";
 import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { cn, initialsFromName } from "@/lib/utils";
+import { auth } from "@/server/auth";
+import { getFollowCounts, isFollowing } from "@/server/services/follows";
 import {
   getMyFavorites,
   getMyReviews,
@@ -21,6 +26,7 @@ import {
   type MyReviewItem,
   type MySubmissionItem,
 } from "@/server/services/users";
+import { toggleFollowAction } from "./actions";
 
 // ============================================================================
 // Perfil público de un usuario por username. 404 si no existe el username, si
@@ -76,14 +82,21 @@ export default async function UserProfilePage({
 
   const tab = parseTab(tabParam);
 
-  // Approved-only para no exponer pending/rejected ajenos.
-  const [stats, list] = await Promise.all([
+  // Approved-only para no exponer pending/rejected ajenos. Counts y estado
+  // de follow en paralelo — todos los lookups dependen solo de user.id.
+  const session = await auth();
+  const viewerId = session?.user?.id ?? null;
+  const isSelf = viewerId === user.id;
+
+  const [stats, list, followCounts, viewerFollows] = await Promise.all([
     getUserStats(user.id, { approvedOnly: true }),
     tab === "resenas"
       ? getMyReviews(user.id)
       : tab === "favoritos"
         ? getMyFavorites(user.id)
         : getMySubmissions(user.id, { approvedOnly: true }),
+    getFollowCounts(user.id),
+    viewerId && !isSelf ? isFollowing(viewerId, user.id) : Promise.resolve(false),
   ]);
 
   const displayName = user.name ?? `@${user.username}`;
@@ -95,25 +108,83 @@ export default async function UserProfilePage({
       <Header title={`@${user.username}`} backHref="/" />
 
       <main className="px-4 pt-4 flex-1 flex flex-col gap-4">
-        <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex items-center gap-3">
-          <Avatar
-            image={user.image}
-            initials={initials}
-            size={56}
-            className="bg-mostaza-deep text-carbon font-display font-semibold"
-            alt={`avatar de ${displayName}`}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="font-display font-semibold text-base text-carbon truncate">
-              {displayName}
-            </p>
-            <p className="text-xs text-tinta-suave">miembro desde {memberSince}</p>
-            {user.bio ? (
-              <p className="text-xs text-tinta-suave mt-1 line-clamp-3 leading-relaxed whitespace-pre-line">
-                {user.bio}
+        <section className="bg-crema-deep border border-crema-edge rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <Avatar
+              image={user.image}
+              initials={initials}
+              size={56}
+              className="bg-mostaza-deep text-carbon font-display font-semibold"
+              alt={`avatar de ${displayName}`}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-base text-carbon truncate">
+                {displayName}
               </p>
-            ) : null}
+              <p className="text-xs text-tinta-suave">miembro desde {memberSince}</p>
+              {user.bio ? (
+                <p className="text-xs text-tinta-suave mt-1 line-clamp-3 leading-relaxed whitespace-pre-line">
+                  {user.bio}
+                </p>
+              ) : null}
+            </div>
           </div>
+
+          {/* Botón seguir — visible cuando hay viewer logueado y no es self.
+              Cuando no hay sesión, link a iniciar-sesion con next. */}
+          {!isSelf && (
+            <div className="flex justify-end">
+              {viewerId ? (
+                <form action={toggleFollowAction}>
+                  <input type="hidden" name="username" value={user.username ?? ""} />
+                  <input
+                    type="hidden"
+                    name="currentlyFollowing"
+                    value={viewerFollows ? "1" : "0"}
+                  />
+                  <Button
+                    type="submit"
+                    variant={viewerFollows ? "secondary" : "primary"}
+                    size="sm"
+                  >
+                    {viewerFollows ? (
+                      <>
+                        <IconUserCheck size={15} aria-hidden="true" />
+                        siguiendo
+                      </>
+                    ) : (
+                      <>
+                        <IconUserPlus size={15} aria-hidden="true" />
+                        seguir
+                      </>
+                    )}
+                  </Button>
+                </form>
+              ) : (
+                <Link
+                  href={`/iniciar-sesion?next=/u/${user.username}`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-mostaza-deep hover:text-mostaza"
+                >
+                  <IconUserPlus size={14} aria-hidden="true" />
+                  iniciar sesión para seguir
+                </Link>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Counts de followers / following */}
+        <section aria-label="social" className="grid grid-cols-2 gap-2">
+          <FollowCountLink
+            href={`/u/${user.username}/seguidores`}
+            count={followCounts.followers}
+            label={followCounts.followers === 1 ? "seguidor" : "seguidores"}
+          />
+          <FollowCountLink
+            href={`/u/${user.username}/siguiendo`}
+            count={followCounts.following}
+            label="siguiendo"
+          />
         </section>
 
         <section aria-label="actividad">
@@ -176,6 +247,31 @@ export default async function UserProfilePage({
 // ============================================================================
 // Sub-componentes
 // ============================================================================
+
+function FollowCountLink({
+  href,
+  count,
+  label,
+}: {
+  href: string;
+  count: number;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="bg-crema-deep border border-crema-edge rounded-md px-3 py-2.5 flex items-center justify-between hover:border-mostaza/50 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98] hover:shadow-md"
+    >
+      <div>
+        <p className="font-display font-semibold text-base text-carbon leading-tight">
+          {count.toLocaleString("es-CL")}
+        </p>
+        <p className="text-[11px] text-tinta-suave">{label}</p>
+      </div>
+      <IconChevronRight size={14} className="text-bronceado" aria-hidden="true" />
+    </Link>
+  );
+}
 
 function StatCard({
   icon,

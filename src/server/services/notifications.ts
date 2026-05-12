@@ -25,8 +25,16 @@ export type ReviewOnOwnedPlacePayload = {
   snippet: string | null;
 };
 
+export type NewFollowerPayload = {
+  followerId: string;
+  followerName: string;
+  followerImage: string | null;
+  followerUsername: string | null;
+};
+
 export type NotificationPayloadMap = {
   review_on_owned_place: ReviewOnOwnedPlacePayload;
+  new_follower: NewFollowerPayload;
 };
 
 export type NotificationItem<T extends NotificationType = NotificationType> = {
