@@ -82,8 +82,13 @@ export default async function HomePage() {
             : "activa la ubicación para ver las que están más cerca"}
         </p>
         <div className="flex flex-col gap-2">
-          {nearby.map((place) => (
-            <PlaceCard key={place.id} place={place} variant="compact" />
+          {nearby.map((place, i) => (
+            <PlaceCard
+              key={place.id}
+              place={place}
+              variant="compact"
+              priority={i === 0}
+            />
           ))}
         </div>
         <div className="text-right mt-2">
@@ -129,7 +134,11 @@ export default async function HomePage() {
           </p>
           <div className="grid grid-cols-1 gap-3">
             {recent.slice(0, 2).map((place) => (
-              <PlaceCard key={place.id} place={place} variant="featured" />
+              <PlaceCard
+                key={place.id}
+                place={place}
+                variant="featured"
+              />
             ))}
           </div>
         </section>

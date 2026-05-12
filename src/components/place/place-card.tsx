@@ -17,6 +17,12 @@ export type PlaceCardProps = {
   place: Place;
   variant?: "compact" | "featured";
   className?: string;
+  /**
+   * Marca esta card como candidata LCP — la primera "above the fold" en home
+   * y /buscar. Hace `priority` en la Image y deshabilita lazy-loading.
+   * Por default false (la mayoría de cards son lazy).
+   */
+  priority?: boolean;
 };
 
 /**
@@ -24,7 +30,12 @@ export type PlaceCardProps = {
  * - compact: lista horizontal, foto cuadrada a la izquierda
  * - featured: card grande con hero arriba, para destacados/trending
  */
-export function PlaceCard({ place, variant = "compact", className }: PlaceCardProps) {
+export function PlaceCard({
+  place,
+  variant = "compact",
+  className,
+  priority = false,
+}: PlaceCardProps) {
   const href = `/${place.comuna}/${place.slug}` as const;
   const distance = place.distanceM !== undefined ? formatDistance(place.distanceM) : null;
   const cuisineLabel = place.cuisines[0];
@@ -54,6 +65,8 @@ export function PlaceCard({ place, variant = "compact", className }: PlaceCardPr
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 380px"
+              priority={priority}
+              {...(priority ? { fetchPriority: "high" } : { loading: "lazy" })}
             />
           ) : (
             <IconPhoto

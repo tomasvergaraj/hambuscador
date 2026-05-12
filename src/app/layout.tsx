@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
 
 import { SessionProvider } from "@/components/auth/session-provider";
+import { WebVitals } from "@/components/perf/web-vitals";
 import { PwaInstaller } from "@/components/pwa/pwa-installer";
 import { auth } from "@/server/auth";
 
@@ -93,6 +94,7 @@ export default async function RootLayout({
         <SessionProvider session={session}>
           {children}
           <PwaInstaller />
+          <WebVitals />
         </SessionProvider>
       </body>
     </html>

@@ -248,20 +248,30 @@ export default async function BuscarPage({
         {results.length === 0 ? (
           <EmptyState query={query} hasFilters={hasFilters} />
         ) : groups ? (
-          groups.map((g) => (
+          groups.map((g, gi) => (
             <div key={g.key} className="flex flex-col gap-2">
               <h3 className="font-display font-semibold text-sm text-carbon mt-2 first:mt-0">
                 {g.label}{" "}
                 <span className="text-bronceado font-normal text-xs">({g.places.length})</span>
               </h3>
-              {g.places.map((place) => (
-                <PlaceCard key={place.id} place={place} variant="compact" />
+              {g.places.map((place, pi) => (
+                <PlaceCard
+                  key={place.id}
+                  place={place}
+                  variant="compact"
+                  priority={gi === 0 && pi === 0}
+                />
               ))}
             </div>
           ))
         ) : (
-          results.map((place) => (
-            <PlaceCard key={place.id} place={place} variant="compact" />
+          results.map((place, i) => (
+            <PlaceCard
+              key={place.id}
+              place={place}
+              variant="compact"
+              priority={i === 0}
+            />
           ))
         )}
       </section>

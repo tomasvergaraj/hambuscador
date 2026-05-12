@@ -123,7 +123,7 @@ function RankedCard({
       >
         {rank}
       </span>
-      <PlaceCard place={place} variant="compact" />
+      <PlaceCard place={place} variant="compact" priority={rank === 1} />
     </div>
   );
 }
