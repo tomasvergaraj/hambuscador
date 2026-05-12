@@ -1,83 +1,21 @@
-"use client";
+import { initialsFromName } from "@/lib/utils";
+import { auth } from "@/server/auth";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-  IconHome,
-  IconSearch,
-  IconMap,
-  IconUser,
-  type Icon,
-} from "@tabler/icons-react";
-import { BOTTOM_NAV_TABS } from "@/lib/constants";
-import { cn } from "@/lib/utils";
-
-const ICON_MAP: Record<(typeof BOTTOM_NAV_TABS)[number]["icon"], Icon> = {
-  home: IconHome,
-  search: IconSearch,
-  map: IconMap,
-  user: IconUser,
-};
+import { BottomNavClient } from "./bottom-nav-client";
 
 /**
- * Bottom navigation persistente. Marca como activo el tab cuya `href`
- * coincide (con / sin query) con el pathname actual.
+ * Wrapper server-side: lee `auth()` y pasa avatar/iniciales al cliente para
+ * que el tab "perfil" muestre la foto real del user cuando hay sesión.
+ *
+ * El componente cliente se encarga del `usePathname` y los estilos. Esto
+ * mantiene transparente la API: cada page que importa `BottomNav` no necesita
+ * pasar nada — el wrapper hidrata desde la sesión.
  */
-export function BottomNav() {
-  const pathname = usePathname();
+export async function BottomNav() {
+  const session = await auth();
+  const name = session?.user?.name ?? null;
+  const avatarInitials = name ? initialsFromName(name) : undefined;
+  const avatarImage = session?.user?.image ?? null;
 
-  return (
-    <nav
-      aria-label="Navegación principal"
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-crema-edge pt-2.5 z-40"
-    >
-      <div className="px-4 flex justify-around items-center">
-        {BOTTOM_NAV_TABS.map((tab) => {
-          const Icon = ICON_MAP[tab.icon];
-          const tabPath = tab.href.split("?")[0]!;
-          const active =
-            tabPath === "/"
-              ? pathname === "/"
-              : pathname.startsWith(tabPath);
-
-          return (
-            <Link
-              key={tab.id}
-              href={tab.href}
-              className={cn(
-                "flex flex-col items-center gap-0.5 transition-[transform,colors] duration-150 active:scale-90",
-                active ? "text-carbon" : "text-bronceado hover:text-tinta-suave",
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <Icon size={22} stroke={1.75} aria-hidden="true" />
-              <span className={cn("text-[10px]", active && "font-medium")}>
-                {tab.label}
-              </span>
-              {/* Indicador de tab activo — siempre presente para que el
-                  layout no salte; transparente cuando inactivo */}
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "h-[2px] w-5 rounded-full transition-colors mt-0.5",
-                  active ? "bg-mostaza" : "bg-transparent",
-                )}
-              />
-            </Link>
-          );
-        })}
-      </div>
-      <p className="text-center text-[10px] text-bronceado/55 pt-1.5 pb-1">
-        desarrollado por{" "}
-        <a
-          href="https://nexosoftware.cl"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-bronceado/80 hover:text-bronceado transition-colors"
-        >
-          nexo software
-        </a>
-      </p>
-    </nav>
-  );
+  return <BottomNavClient avatarImage={avatarImage} avatarInitials={avatarInitials} />;
 }

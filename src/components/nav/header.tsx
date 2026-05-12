@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
+import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/brand/logo";
 
 export type HeaderProps = {
@@ -24,6 +25,11 @@ export type HeaderProps = {
    */
   avatarInitials?: string;
   /**
+   * URL del avatar real (Google picture o R2 custom). Si está, prima sobre
+   * `avatarInitials` (que sirve de fallback si la imagen falla).
+   */
+  avatarImage?: string | null;
+  /**
    * Si está seteado, el botón "atrás" navega a esta ruta en vez de hacer
    * `router.back()`. Útil para páginas-destino (tabs como /picas, /perfil)
    * donde el usuario espera volver a inicio, no a la página de origen.
@@ -42,6 +48,7 @@ export function Header({
   subtitle,
   isModal,
   avatarInitials,
+  avatarImage,
   backHref,
 }: HeaderProps) {
   const router = useRouter();
@@ -94,10 +101,16 @@ export function Header({
       {avatarInitials ? (
         <Link
           href="/perfil"
-          className="w-8 h-8 rounded-full bg-mostaza-deep text-carbon flex items-center justify-center text-xs font-medium hover:bg-mostaza transition-[transform,colors] duration-150 active:scale-90"
+          className="hover:opacity-80 transition-[transform,opacity] duration-150 active:scale-90"
           aria-label="Mi perfil"
         >
-          {avatarInitials}
+          <Avatar
+            image={avatarImage ?? null}
+            initials={avatarInitials}
+            size={32}
+            className="bg-mostaza-deep text-carbon"
+            alt="mi perfil"
+          />
         </Link>
       ) : (
         <Link

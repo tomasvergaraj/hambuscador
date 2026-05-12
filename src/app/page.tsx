@@ -35,10 +35,11 @@ export default async function HomePage() {
 
   const nearby = places.slice(0, 3);
   const avatarInitials = session?.user?.name ? initialsFromName(session.user.name) : undefined;
+  const avatarImage = session?.user?.image ?? null;
 
   return (
     <main className="min-h-screen pb-24">
-      <Header avatarInitials={avatarInitials} />
+      <Header avatarInitials={avatarInitials} avatarImage={avatarImage} />
 
       <section className="px-4 pt-2">
         <h1 className="font-display font-semibold text-[28px] leading-[1.05] text-carbon">
