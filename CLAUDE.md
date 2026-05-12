@@ -447,6 +447,10 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-08-place-contact-featured.sql` — `places.whatsapp` text + `places.is_featured` boolean default false. Cabe el contacto WhatsApp y el flag de publicidad (pin diferenciado en mapa). Idempotente. ⏳ Pendiente aplicar en Neon prod.
 - `drizzle/2026-05-08-place-logo.sql` — `places.logo` text. URL del logo de marca; reemplaza thumbnail en PlaceCard compact cuando existe. Solo admin lo setea. Idempotente. ⏳ Pendiente aplicar en Neon prod.
 - `drizzle/2026-05-08-place-claims.sql` — tabla `place_claims` para flow de "este es mi local". Aprobar setea `places.claimed_by` + `is_verified=true`. Owners pueden editar via `/mi-local/[id]/editar`. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-12-notifications.sql` — tabla `notifications` (in-app feed) + índices por user_id/created_at y parcial unread. Idempotente. ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-12-follows.sql` — tabla `follows` (PK compuesto, CHECK no-self, índice followee). Sistema seguidores. Idempotente. ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-12-push-subscriptions.sql` — tabla `push_subscriptions` (endpoint UNIQUE, p256dh, auth, user_agent). Web Push API. Idempotente. ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). ⏳ Pendiente aplicar en Neon prod.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
