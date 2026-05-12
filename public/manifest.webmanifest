@@ -42,6 +42,15 @@
       "purpose": "any"
     }
   ],
+  "share_target": {
+    "action": "/api/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "shortcuts": [
     {
       "name": "Buscar picás",

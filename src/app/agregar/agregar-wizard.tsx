@@ -32,10 +32,16 @@ import {
 const initial: CreatePlaceState = {};
 type Step = 1 | 2 | 3;
 
-export function AgregarWizard({ comunas }: { comunas: Comuna[] }) {
+export function AgregarWizard({
+  comunas,
+  initialName,
+}: {
+  comunas: Comuna[];
+  initialName?: string;
+}) {
   const [step, setStep] = useState<Step>(1);
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [comuna, setComuna] = useState<Comuna | null>(null);
   const [address, setAddress] = useState("");
   const [lat, setLat] = useState<number | null>(null);

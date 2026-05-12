@@ -17,12 +17,19 @@ export const metadata = {
  * Pasamos las 346 comunas como prop al wizard — payload ~28KB, vale el trade
  * de filter client-side sin round-trips por keystroke.
  */
-export default async function AgregarPage() {
+export default async function AgregarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ nombre?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) {
     redirect("/iniciar-sesion");
   }
 
+  const sp = await searchParams;
+  const initialName = sp.nombre?.trim().slice(0, 100) || undefined;
+
   const comunas = await getAllComunas();
-  return <AgregarWizard comunas={comunas} />;
+  return <AgregarWizard comunas={comunas} initialName={initialName} />;
 }
