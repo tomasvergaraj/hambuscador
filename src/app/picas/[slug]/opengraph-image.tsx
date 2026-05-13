@@ -124,7 +124,6 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
           >
             {heroPhoto ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={heroPhoto}
                   alt=""

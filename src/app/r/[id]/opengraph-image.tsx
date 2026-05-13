@@ -140,7 +140,6 @@ export default async function ReviewOgImage({
           >
             {heroPhoto ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={heroPhoto}
                   alt=""

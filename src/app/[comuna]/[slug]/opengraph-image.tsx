@@ -330,8 +330,7 @@ function Hero({
         }}
       >
         {/* Foto del local — full cover */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+                <img
           src={photoUrl}
           alt=""
           width={1200}
@@ -374,8 +373,7 @@ function Hero({
               filter: "drop-shadow(0 4px 12px rgba(31, 27, 23, 0.45))",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+                        <img
               src={logoUrl}
               alt={name}
               width={72}
@@ -473,8 +471,7 @@ function Hero({
             filter: "drop-shadow(0 8px 24px rgba(31, 27, 23, 0.4))",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+                    <img
             src={logoUrl}
             alt={name}
             width={204}
