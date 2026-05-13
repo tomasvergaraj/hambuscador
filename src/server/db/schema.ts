@@ -524,6 +524,61 @@ export const webVitals = pgTable(
   }),
 );
 
+/**
+ * Listas curadas `/picas/[slug]`. Antes hardcoded en `lib/picas.ts`, ahora
+ * editables desde `/admin/picas` (CRUD admin). El seed inicial migra las 32
+ * listas hardcoded; `lib/picas.ts` mantiene esa misma data como FALLBACK
+ * para modo demo (sin DATABASE_URL) y como fuente del seed.
+ *
+ * Migration: `drizzle/2026-05-13-picas-lists.sql` (idempotente, ON CONFLICT
+ * DO NOTHING en seed para no pisar ediciones del admin si re-corre).
+ */
+export const picaIconEnum = [
+  "flame",
+  "leaf",
+  "coin",
+  "sparkles",
+  "map-pin",
+] as const;
+export type PicaIconNameDb = (typeof picaIconEnum)[number];
+
+export const picasLists = pgTable(
+  "picas_lists",
+  {
+    /** Slug en URL: `/picas/<slug>`. Inmutable después de crear (rompería links). */
+    slug: text("slug").primaryKey(),
+    title: text("title").notNull(),
+    hook: text("hook").notNull(),
+    intro: text("intro").notNull(),
+    icon: text("icon", { enum: picaIconEnum }).notNull(),
+    /** Cuántos items mostrar en el ranking. */
+    maxItems: integer("max_items").notNull().default(10),
+    /**
+     * Criteria de filtrado serializada. Shape:
+     * `{ cuisines?, priceRanges?, comunaSlug?, regionLabel?, minRating?,
+     *    approvedWithinDays?, openAfterHour? }` — mismas keys que
+     * `PicasListCriteria` en `lib/picas.ts`.
+     */
+    criteria: jsonb("criteria").notNull().default(sql`'{}'::jsonb`),
+    /** Orden de aparición en el index `/picas`. Menor = primero. */
+    sortOrder: integer("sort_order").notNull().default(100),
+    /** `false` oculta la lista del index público y del sitemap. */
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    activeSortIdx: index("picas_lists_active_sort_idx").on(
+      table.isActive,
+      table.sortOrder,
+    ),
+  }),
+);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -556,6 +611,8 @@ export type DbComuna = typeof comunas.$inferSelect;
 export type DbPlaceClaim = typeof placeClaims.$inferSelect;
 export type DbWebVital = typeof webVitals.$inferSelect;
 export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type DbPicasList = typeof picasLists.$inferSelect;
+export type NewDbPicasList = typeof picasLists.$inferInsert;
 export type DbNotification = typeof notifications.$inferSelect;
 export type NewDbNotification = typeof notifications.$inferInsert;
 export type DbFollow = typeof follows.$inferSelect;
