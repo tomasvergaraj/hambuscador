@@ -2,6 +2,7 @@ import { IconArrowLeft } from "@tabler/icons-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { getActiveRegions, getAllComunas } from "@/lib/data";
 import { getPicasListRowForAdmin } from "@/server/services/picas-lists";
 
 import { updatePicasListAction, type ActionState } from "../../actions";
@@ -26,7 +27,11 @@ export default async function EditPicasListPage({
   params: Promise<Params>;
 }) {
   const { slug } = await params;
-  const row = await getPicasListRowForAdmin(slug);
+  const [row, comunas, regions] = await Promise.all([
+    getPicasListRowForAdmin(slug),
+    getAllComunas(),
+    getActiveRegions(),
+  ]);
   if (!row) notFound();
 
   // Bind del slug a la action; firma queda (prev, fd).
@@ -54,6 +59,8 @@ export default async function EditPicasListPage({
       <PicasForm
         mode="edit"
         action={action}
+        comunas={comunas.map((c) => ({ slug: c.slug, label: c.label }))}
+        regions={regions.map((r) => ({ label: r.label }))}
         initial={{
           slug: row.slug,
           title: row.title,

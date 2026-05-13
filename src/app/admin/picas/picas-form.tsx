@@ -43,10 +43,14 @@ export function PicasForm({
   mode,
   initial,
   action,
+  comunas,
+  regions,
 }: {
   mode: "create" | "edit";
   initial: PicasFormInitial;
   action: (prev: ActionState, fd: FormData) => Promise<ActionState>;
+  comunas: Array<{ slug: string; label: string }>;
+  regions: Array<{ label: string }>;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -217,21 +221,36 @@ export function PicasForm({
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field title="slug de comuna" hint='ej. "providencia". match exacto.'>
+          <Field title="comuna" hint="filtro por slug. tipear pa autocompletar.">
             <input
               name="criteria_comunaSlug"
               defaultValue={initial.criteria.comunaSlug ?? ""}
+              list="picas-comunas-list"
               className={inputCls}
-              placeholder=""
+              placeholder="ej. providencia"
+              autoComplete="off"
             />
+            <datalist id="picas-comunas-list">
+              {comunas.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.label}
+                </option>
+              ))}
+            </datalist>
           </Field>
-          <Field title="label de región" hint='ej. "Región Metropolitana". match exacto.'>
-            <input
+          <Field title="región" hint="match exacto al label oficial.">
+            <select
               name="criteria_regionLabel"
               defaultValue={initial.criteria.regionLabel ?? ""}
               className={inputCls}
-              placeholder=""
-            />
+            >
+              <option value="">— sin filtro —</option>
+              {regions.map((r) => (
+                <option key={r.label} value={r.label}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
 
