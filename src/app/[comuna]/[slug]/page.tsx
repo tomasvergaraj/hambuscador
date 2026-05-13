@@ -31,7 +31,7 @@ import { ShareButton } from "@/components/place/share-button";
 import { auth } from "@/server/auth";
 import { hasPendingClaim, isOwnerOf } from "@/server/services/claims";
 import { isFavorite } from "@/server/services/favorites";
-import { getMyReviewForPlace } from "@/server/services/reviews";
+import { getMyReviewWithAuthor } from "@/server/services/reviews";
 
 import { deleteMyReview } from "./calificar/actions";
 import { toggleFavoriteAction } from "./favorite-action";
@@ -80,18 +80,24 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
   const place = await getPlaceBySlug(comuna, slug);
   if (!place) notFound();
 
-  const [reviews, session] = await Promise.all([getReviewsByPlaceId(place.id), auth()]);
+  const session = await auth();
   const userId = session?.user?.id ?? null;
   const isAdmin = session?.user?.role === "admin";
-  const [myReview, favorited, isOwner, claimPending] = await Promise.all([
-    userId ? getMyReviewForPlace(place.id, userId) : Promise.resolve(null),
+
+  // Mine va aparte (con JOIN a users) y `others` excluye su id, así no
+  // overfetcheamos. Antes pedíamos 20 reseñas para mostrar 2 + buscar la
+  // propia en el array — ahora son ~7 queries en paralelo, todas baratas.
+  const [mine, others, favorited, isOwner, claimPending] = await Promise.all([
+    userId ? getMyReviewWithAuthor(place.id, userId) : Promise.resolve(null),
+    getReviewsByPlaceId(
+      place.id,
+      userId ? { limit: 6, excludeAuthorId: userId } : { limit: 6 },
+    ),
     userId ? isFavorite(userId, place.id) : Promise.resolve(false),
     userId ? isOwnerOf(userId, place.id) : Promise.resolve(false),
     userId ? hasPendingClaim(place.id, userId) : Promise.resolve(false),
   ]);
   const canEdit = isAdmin || isOwner;
-  const mine = myReview ? (reviews.find((r) => r.id === myReview.id) ?? null) : null;
-  const others = mine ? reviews.filter((r) => r.id !== mine.id) : reviews;
 
   // JSON-LD Restaurant — Google usa esto para rich results (rating, dirección,
   // horario, fotos en SERP). Ver https://schema.org/Restaurant
@@ -493,7 +499,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
       <div className="fixed bottom-0 left-0 right-0 bg-crema border-t border-crema-edge px-4 py-3 z-30">
         <Link href={`/${place.comuna}/${place.slug}/calificar`} className="block">
           <Button variant="primary" size="lg" fullWidth>
-            {myReview ? "editar mi reseña" : "calificar este lugar"}
+            {mine ? "editar mi reseña" : "calificar este lugar"}
           </Button>
         </Link>
       </div>

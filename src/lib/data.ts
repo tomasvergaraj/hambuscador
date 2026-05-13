@@ -182,10 +182,18 @@ export const searchPublicUsers = cache(
 
 /**
  * Reseñas de un local, más recientes primero.
+ *
+ * Cuando `excludeAuthorId` se pasa, omite la reseña del autor — útil en la
+ * detail page cuando "tu reseña" se trae aparte con `getMyReviewWithAuthor`
+ * y queremos los "otros" sin contar la propia. La key del cache incluye el
+ * exclude para no mezclar resultados entre usuarios.
  */
 export const getReviewsByPlaceId = cache(
-  async (placeId: string) => {
-    return getReviewsByPlaceIdSvc(placeId);
+  async (
+    placeId: string,
+    opts?: { limit?: number; excludeAuthorId?: string },
+  ) => {
+    return getReviewsByPlaceIdSvc(placeId, opts);
   },
   ["reviews-by-place"],
   { revalidate: 30, tags: ["reviews"] },

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
 import { places, reviews, users, type DbReview } from "@/server/db/schema";
@@ -58,19 +58,26 @@ function computeInitials(name: string): string {
  */
 export async function getReviewsByPlaceId(
   placeId: string,
-  opts?: { limit?: number },
+  opts?: { limit?: number; excludeAuthorId?: string },
 ): Promise<Review[]> {
   if (!isDbConfigured()) {
     return getReviewsByPlaceIdMock(placeId);
   }
 
-  const { limit = 20 } = opts ?? {};
+  const { limit = 20, excludeAuthorId } = opts ?? {};
   const db = getDb();
 
   // INNER JOIN + filter banned: si el autor está baneado, su reseña queda
   // oculta del listado público (ban retroactivo en lectura). El agregado
   // `places.rating_avg` se mantiene consistente porque `banUser` dispara
   // `recomputePlacesForUser` que excluye baneados.
+  //
+  // `excludeAuthorId` permite a la detail page traer "otras" reseñas sin
+  // contar la del usuario logueado (que se fetchea aparte con getMyReviewForPlace).
+  const whereClauses = [eq(reviews.placeId, placeId), isNull(users.bannedAt)];
+  if (excludeAuthorId) {
+    whereClauses.push(ne(reviews.authorId, excludeAuthorId));
+  }
   const rows = await db
     .select({
       id: reviews.id,
@@ -90,7 +97,7 @@ export async function getReviewsByPlaceId(
     })
     .from(reviews)
     .innerJoin(users, eq(reviews.authorId, users.id))
-    .where(and(eq(reviews.placeId, placeId), isNull(users.bannedAt)))
+    .where(and(...whereClauses))
     .orderBy(desc(reviews.createdAt))
     .limit(limit);
 
@@ -306,6 +313,10 @@ export async function getReviewById(reviewId: string): Promise<PublicReview | nu
 /**
  * Reseña del usuario en este local (si existe). null si no hay.
  * No usa cache — depende de la sesión.
+ *
+ * Retorna `DbReview` crudo — usado por el flow de calificar (edit/upsert)
+ * que necesita los aspect ratings con su semántica NULL preservada
+ * (NULL = no calificado, !== rating overall).
  */
 export async function getMyReviewForPlace(
   placeId: string,
@@ -321,6 +332,44 @@ export async function getMyReviewForPlace(
     .limit(1);
 
   return row ?? null;
+}
+
+/**
+ * Variante con JOIN a `users` para renderizar "tu reseña" en la ficha del
+ * local sin tener que buscarla en el array paginado de reseñas. Útil cuando
+ * la lista de reseñas se trae con `excludeAuthorId` y un `limit` chico —
+ * la reseña propia se trae aparte con este método.
+ */
+export async function getMyReviewWithAuthor(
+  placeId: string,
+  userId: string,
+): Promise<Review | null> {
+  if (!isDbConfigured()) return null;
+
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: reviews.id,
+      placeId: reviews.placeId,
+      authorId: reviews.authorId,
+      rating: reviews.rating,
+      aspectComida: reviews.aspectComida,
+      aspectAtencion: reviews.aspectAtencion,
+      aspectAmbiente: reviews.aspectAmbiente,
+      text: reviews.text,
+      photos: reviews.photos,
+      createdAt: reviews.createdAt,
+      updatedAt: reviews.updatedAt,
+      authorName: users.name,
+      authorImage: users.image,
+      authorUsername: users.username,
+    })
+    .from(reviews)
+    .innerJoin(users, eq(reviews.authorId, users.id))
+    .where(and(eq(reviews.placeId, placeId), eq(reviews.authorId, userId)))
+    .limit(1);
+
+  return row ? dbReviewToUi(row) : null;
 }
 
 /**
