@@ -7,7 +7,7 @@ import { BottomNav } from "@/components/nav/bottom-nav";
 import { HomeSearchInput } from "@/components/place/home-search-input";
 import { PlaceCard } from "@/components/place/place-card";
 import { UseLocationButton } from "@/components/place/use-location-button";
-import { Chip } from "@/components/ui/chip";
+import { ChipDisplay } from "@/components/ui/chip-display";
 import { getPlacesNearby, getRecentlyApprovedPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { initialsFromName } from "@/lib/utils";
@@ -58,13 +58,14 @@ export default async function HomePage() {
         className="px-4 mt-3 flex gap-1.5 overflow-x-auto scrollbar-hide pb-1"
         aria-label="Atajos"
       >
-        {/* "cerca" es el único chip que refleja estado, los demás son links a filtros */}
+        {/* Todos son links a filtros — el Link es el interactivo, ChipDisplay es el visual.
+            "cerca" refleja estado opt-in geo; los demás son entry points fijos. */}
         <Link href="/buscar" className="shrink-0">
-          <Chip active={!!coords}>cerca</Chip>
+          <ChipDisplay active={!!coords}>cerca</ChipDisplay>
         </Link>
         {QUICK_LINKS.map((link) => (
           <Link key={link.href} href={link.href} className="shrink-0">
-            <Chip>{link.label}</Chip>
+            <ChipDisplay>{link.label}</ChipDisplay>
           </Link>
         ))}
       </section>

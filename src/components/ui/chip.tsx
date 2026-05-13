@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { IconX } from "@tabler/icons-react";
-import { cn } from "@/lib/utils";
+import { chipClassName } from "./chip-display";
 
 export type ChipProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
@@ -10,6 +10,11 @@ export type ChipProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   onRemove?: () => void;
 };
 
+/**
+ * Chip interactivo (button) — para filtros con estado, toggles, multi-select.
+ * Si lo necesitás como visual dentro de un `<Link>`, usá `ChipDisplay`
+ * (`./chip-display`) — `<button>` dentro de `<a>` es HTML inválido.
+ */
 export const Chip = React.forwardRef<HTMLButtonElement, ChipProps>(function Chip(
   { active = false, onRemove, children, className, type = "button", ...props },
   ref,
@@ -18,13 +23,7 @@ export const Chip = React.forwardRef<HTMLButtonElement, ChipProps>(function Chip
     <button
       ref={ref}
       type={type}
-      className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-[transform,colors] duration-150 active:scale-[0.96]",
-        active
-          ? "bg-carbon text-crema font-medium"
-          : "bg-white text-carbon border border-crema-edge hover:bg-crema-deep",
-        className,
-      )}
+      className={chipClassName(active, className)}
       {...props}
     >
       {children}
