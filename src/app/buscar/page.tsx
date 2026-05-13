@@ -10,21 +10,29 @@ import { MapSearchInput } from "@/components/place/map-search-input";
 import { PicaIcon } from "@/components/place/pica-icon";
 import { PlaceCard } from "@/components/place/place-card";
 import { SearchFilters } from "@/components/place/search-filters";
-
-// PlacesMap pesa lo suyo (MapLibre + pmtiles + CSS de maplibre-gl). En vista
-// `lista` (default y mayoritaria) nunca se renderiza — `next/dynamic` lo
-// emite como chunk aparte, así su JS solo se descarga cuando el usuario
-// pide `?vista=mapa`.
-const PlacesMap = dynamic(
-  () =>
-    import("@/components/place/places-map").then((m) => ({ default: m.PlacesMap })),
-);
 import { searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { PICAS_LISTS, type PicasList } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 import { auth } from "@/server/auth";
 import { logSearch } from "@/server/services/search-logs";
+
+// PlacesMap pesa lo suyo (MapLibre + pmtiles + CSS de maplibre-gl). En vista
+// `lista` (default y mayoritaria) nunca se renderiza — `next/dynamic` lo
+// emite como chunk aparte, así su JS solo se descarga cuando el usuario
+// pide `?vista=mapa`. `loading` muestra el lienzo en mostaza-deep para que
+// la transición a mapa no flashee blanco mientras el chunk descarga.
+const PlacesMap = dynamic(
+  () =>
+    import("@/components/place/places-map").then((m) => ({ default: m.PlacesMap })),
+  {
+    loading: () => (
+      <div className="absolute inset-0 bg-mostaza-deep flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-crema-deep border-t-transparent animate-spin" />
+      </div>
+    ),
+  },
+);
 
 type SearchParams = {
   q?: string;
@@ -114,10 +122,24 @@ export default async function BuscarPage({
   // Vista mapa: layout fullscreen con todos los controles flotando encima.
   // ============================================================================
   if (view === "mapa") {
+    // Proyectar a MapPlace antes de pasar al cliente — el mapa solo usa 8
+    // campos (id, name, comuna*, slug, rating, isFeatured, coords). Con
+    // limit=5000 en mapa, serializar el Place full sumaría ~3MB; el subset
+    // pesa ~600KB.
+    const mapPlaces = results.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      comuna: p.comuna,
+      comunaLabel: p.comunaLabel,
+      name: p.name,
+      rating: p.rating,
+      isFeatured: p.isFeatured,
+      coords: p.coords,
+    }));
     return (
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <PlacesMap
-          places={results}
+          places={mapPlaces}
           userCoords={userCoords ?? undefined}
           className="map-fullscreen absolute inset-0 z-0"
         />

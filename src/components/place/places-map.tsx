@@ -11,6 +11,16 @@ import {
 } from "@/components/place/map-search-input";
 import type { Place } from "@/types/place";
 
+/**
+ * Subset estricto de Place que el mapa necesita. La page proyecta antes de
+ * pasar — así con vista=mapa NO serializamos 5000 × full Place (~3MB) al
+ * cliente, solo los 8 campos que pintan pines (~600KB).
+ */
+export type MapPlace = Pick<
+  Place,
+  "id" | "slug" | "comuna" | "comunaLabel" | "name" | "rating" | "isFeatured" | "coords"
+>;
+
 type Feature = {
   type: "Feature";
   properties: {
@@ -25,7 +35,7 @@ type Feature = {
   geometry: { type: "Point"; coordinates: [number, number] };
 };
 
-function buildFeatures(places: Place[]): Feature[] {
+function buildFeatures(places: MapPlace[]): Feature[] {
   return places
     .filter((p) => Number.isFinite(p.coords.lat) && Number.isFinite(p.coords.lng))
     .map((p) => ({
@@ -141,7 +151,7 @@ const CHILE_CENTER: [number, number] = [-70.65, -33.45];
 let pmtilesRegistered = false;
 
 type Props = {
-  places: Place[];
+  places: MapPlace[];
   /** Coords del usuario (cookie hb_geo). Si está, se renderiza como marker tomate. */
   userCoords?: { lat: number; lng: number };
   /** Override de className para el container (ej. fixed inset-0 cuando es full screen). */
