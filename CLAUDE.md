@@ -758,6 +758,34 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: Push web en iOS Safari requiere PWA instalada vía Add to Home Screen. Tab regular del browser NO recibe push.
 - ✅ Lección: re-follow no debe re-notificar. Pattern: `INSERT ... ON CONFLICT DO NOTHING RETURNING`, si la longitud retornada es 0 → ya seguía → no crear notification.
 
+### Hecho en esta sesión (2026-05-13 sesión 10 — CWV pass)
+
+Track: **CWV / Lighthouse audit** — 7 commits enfocados en perf, sin features nuevos. (Sesión 9 cubrió listas /picas + Web Vitals DB + email digest + OG con foto + share files + welcome — ver memoria `project_state` / `Próximos pasos` para detalle.)
+
+#### Bundle inicial / hydration
+- ✅ **Header → server component** (c8aefa5). Split: `header.tsx` (server, renderiza el Link cuando hay `backHref`) + `back-button.tsx` (tiny client island con `router.back()`). Páginas con `backHref` set (picas, perfil, /u/, /r/, reclamar, etc) ya no embarcan el bundle de `useRouter`. Ganancia ~3-4KB JS por page con back-link.
+- ✅ **PwaInstaller + WebVitals lazy** (8bb8455). Nuevo `deferred-chrome.tsx` ("use client") con `dynamic(() => …, { ssr: false })` para ambos. No producen markup → SSR no aporta nada. Quedan en chunks separados, hidratan post-paint. Saca ~5KB del bundle inicial del layout.
+- ✅ **PlacesMap chunk dinámico** (28f15da). `?vista=lista` (default y mayoritaria) ya no descarga MapLibre + pmtiles + CSS de maplibre-gl. `next/dynamic` con `loading` que muestra spinner en lienzo mostaza-deep mientras carga. Ganancia ~150KB en lista.
+
+#### Network / payload
+- ✅ **Preconnect a R2 photos** (fe1e5e4). `<link rel="preconnect" href={R2_PUBLIC_URL origin} crossOrigin="anonymous">` + `dns-prefetch` fallback en root layout. Lee `R2_PUBLIC_URL` server-side; si no está, no emite nada (modo demo). Ganancia ~100-200ms en LCP de cualquier card con foto.
+- ✅ **MapPlace projection** (a0e2832). El mapa solo usa 8 campos del Place — antes con `limit=5000` mandábamos el Place full (photos, hours, address, phone, whatsapp, etc) ≈3MB de RSC payload. Tipo `MapPlace = Pick<Place, …>` + la page proyecta antes de pasar al cliente. Payload baja ~80% (a ~600KB).
+- ✅ **PlaceCard compact quality=70** (b0651d3). Thumbs de 78px no justifican calidad 75 default — bajar a 70 ahorra ~15-20% bytes sin pérdida visible. Hero featured (128px) y avatares se mantienen en default.
+
+#### DB / SQL
+- ✅ **Detail page overfetch fix** (1392497). Antes traíamos 20 reseñas para mostrar 2 + buscar la propia con `reviews.find()`. Ahora:
+  - `getReviewsByPlaceId` acepta `excludeAuthorId` → la lista trae 6 (excluyendo la del user logueado).
+  - Nueva `getMyReviewWithAuthor` con JOIN a `users` → la reseña propia se trae aparte directamente como `Review` shape.
+  - `getMyReviewForPlace` se mantiene retornando `DbReview` raw para el flow de `/calificar` (preserva semántica NULL de aspect ratings).
+  - Bonus: bug latente fixed — antes, si el user tenía reseña antigua en un local con muchas reviews, `mine` quedaba null aunque tuviera reseña (no estaba en las primeras 20).
+
+#### DX / lecciones
+- ✅ Lección: **`next/dynamic` con `ssr: false` solo funciona en client components**. Para defererir un componente cliente desde el root layout (que es server), envolver en un wrapper "use client" que haga el `dynamic()` adentro. Patrón aplicado en `deferred-chrome.tsx`.
+- ✅ Lección: **proyectar antes de pasar a client components**. RSC serializa todos los props que cruzan la frontera server→client. Si un client component solo usa 8 de 25 campos, `.map(p => ({ ...subset }))` en la page reduce el payload sin tocar el shape de DB. Para listas grandes (5000+) es ganancia masiva.
+- ✅ Lección: **`getMyXForPlace` patrones suelen necesitar 2 variantes**: una raw (DbReview) para forms/upserts que necesitan semántica NULL, otra joined (Review con author) para render UI. No "mejorar" la primera rompe el form.
+- ✅ Lección: **Header split server/client tiene precondición**. Cuando casi todas las pages pasan `backHref` (back es Link puro), no `router.back()`, conviene hacer Header server y mover `useRouter()` a un mini client island. Si la mayoría usa router.back, no vale la pena.
+- ✅ Lección: **`<a><button>…</button></a>` es HTML inválido**. Lo vi en home.tsx (Link wrapping Chip). Browser lo acepta pero a11y/lint puede flaggear. Cuando Chip se usa pasivo (dentro de Link), debería ser un `<span>` visual; cuando es interactivo (filtro toggle), `<button>`. Anotado pa refactor futuro, no lo toqué.
+
 ### Próximos pasos pendientes
 
 #### Deploy / infra
@@ -776,8 +804,10 @@ PMTiles propio en R2 ✅ (2026-05-13). Bucket separado `hambuscador-tiles`, cust
 6. **Persistir Web Vitals**: hoy van a stdout, leíbles desde Vercel logs. Cuando se quiera trending, persistir en tabla `web_vitals` o forwardear a servicio (Plausible custom events, Datadog RUM).
 
 #### Optimización
-- **Core Web Vitals target 90+** (PageSpeed Insights baseline pendiente). Datos del reporter ya entran a Vercel logs.
+- **Core Web Vitals target 90+** (PageSpeed Insights baseline pendiente). Quick wins de sesión 10 aplicados — pendiente medir delta con tráfico real en `/admin/perf?dias=7` (24-48h post-deploy).
 - **Lighthouse PWA score** verificar que pasa toda la check (offline, installable, manifest, share_target).
+- **Refactor pendiente**: Chip server/client split (usado pasivo en home dentro de Link genera `<a><button>` inválido). No urgente.
+- **Refactor pendiente**: `getPicasListsWithCounts` corre 32 queries paralelas pa el index de /picas. Cache 5min mitiga, pero un service light (count + 1 preview por lista en una sola query) bajaría TTFB en cold cache.
 
 ## Recursos
 
