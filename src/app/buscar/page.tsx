@@ -10,9 +10,9 @@ import { MapSearchInput } from "@/components/place/map-search-input";
 import { PicaIcon } from "@/components/place/pica-icon";
 import { PlaceCard } from "@/components/place/place-card";
 import { SearchFilters } from "@/components/place/search-filters";
-import { searchPlaces } from "@/lib/data";
+import { getActivePicasLists, searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
-import { PICAS_LISTS, type PicasList } from "@/lib/picas";
+import { type PicasList } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 import { auth } from "@/server/auth";
 import { logSearch } from "@/server/services/search-logs";
@@ -105,7 +105,7 @@ export default async function BuscarPage({
   // ¿La query matchea una lista curada? Si es así, mostramos un atajo arriba
   // de los resultados — útil para que el usuario salte a la curaduría editorial
   // en lugar de filtrar a mano. Solo desde 3 chars para evitar matches ruidosos.
-  const relatedPica = findRelatedPica(query);
+  const relatedPica = await findRelatedPica(query);
 
   // Agrupación: solo cuando no hay query ni filtros ni sort explícito.
   // Con coords → bandas de distancia; sin coords → por comuna.
@@ -350,11 +350,12 @@ function EmptyState({ query, hasFilters }: { query: string; hasFilters: boolean 
  * Busca la primera lista curada cuyo title o hook contiene la query (normalizada
  * accent/case). Mínimo 3 chars para evitar que "el" o "la" matcheen cualquier cosa.
  */
-function findRelatedPica(query: string): PicasList | undefined {
+async function findRelatedPica(query: string): Promise<PicasList | undefined> {
   const trimmed = query.trim();
   if (trimmed.length < 3) return undefined;
   const norm = normalizeForSearch(trimmed);
-  return PICAS_LISTS.find(
+  const lists = await getActivePicasLists();
+  return lists.find(
     (l) =>
       normalizeForSearch(l.title).includes(norm) ||
       normalizeForSearch(l.hook).includes(norm),

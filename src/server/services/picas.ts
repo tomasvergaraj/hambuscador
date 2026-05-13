@@ -5,12 +5,9 @@
 // ============================================================================
 
 import type { CuisineId, PriceRangeId } from "@/lib/constants";
-import {
-  getPicasListBySlug,
-  type PicasList,
-  type PicasListCriteria,
-} from "@/lib/picas";
+import type { PicasList, PicasListCriteria } from "@/lib/picas";
 import type { Place } from "@/types/place";
+import { getActivePicasLists } from "./picas-lists";
 import {
   getApprovedPlacesForPicasIndex,
   searchPlaces,
@@ -49,9 +46,11 @@ export async function getPlacesForPicasList(list: PicasList): Promise<Place[]> {
 export async function getPicasListsWithCounts(): Promise<
   Array<{ list: PicasList; count: number; preview: Place | null }>
 > {
-  const { PICAS_LISTS } = await import("@/lib/picas");
-  const all = await getApprovedPlacesForPicasIndex();
-  return PICAS_LISTS.map((list) => {
+  const [lists, all] = await Promise.all([
+    getActivePicasLists(),
+    getApprovedPlacesForPicasIndex(),
+  ]);
+  return lists.map((list) => {
     const matching = all.filter((p) => matchesCriteria(p, list.criteria));
     const top = matching[0];
     return {
@@ -105,10 +104,6 @@ function matchesCriteria(
     if (!found) return false;
   }
   return true;
-}
-
-export function picasListBySlug(slug: string): PicasList | undefined {
-  return getPicasListBySlug(slug);
 }
 
 export type { PicasList, PicasListCriteria };

@@ -19,11 +19,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   getActiveComunas,
+  getActivePicasLists,
   getActiveRegions,
   searchPlaces,
   searchPublicUsers,
 } from "@/lib/data";
-import { PICAS_LISTS } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 
 export const runtime = "nodejs";
@@ -55,11 +55,13 @@ export async function GET(req: NextRequest) {
     lng: p.coords.lng,
   }));
 
-  const picas = PICAS_LISTS.filter((l) => {
-    const title = normalizeForSearch(l.title);
-    const hook = normalizeForSearch(l.hook);
-    return title.includes(normalized) || hook.includes(normalized);
-  })
+  const activePicas = await getActivePicasLists();
+  const picas = activePicas
+    .filter((l) => {
+      const title = normalizeForSearch(l.title);
+      const hook = normalizeForSearch(l.hook);
+      return title.includes(normalized) || hook.includes(normalized);
+    })
     .slice(0, 3)
     .map((l) => ({ slug: l.slug, title: l.title, icon: l.icon }));
 

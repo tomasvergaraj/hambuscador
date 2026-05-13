@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { PICAS_LISTS } from "@/lib/picas";
+import { getActivePicasLists } from "@/lib/data";
 import { getApprovedSlugs } from "@/server/services/places";
 
 // ============================================================================
@@ -18,7 +18,10 @@ const SITE_URL =
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const slugs = await getApprovedSlugs();
+  const [slugs, lists] = await Promise.all([
+    getApprovedSlugs(),
+    getActivePicasLists(),
+  ]);
   const now = new Date();
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -48,7 +51,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  const picasRoutes: MetadataRoute.Sitemap = PICAS_LISTS.map((l) => ({
+  const picasRoutes: MetadataRoute.Sitemap = lists.map((l) => ({
     url: `${SITE_URL}/picas/${l.slug}`,
     lastModified: now,
     changeFrequency: "weekly",

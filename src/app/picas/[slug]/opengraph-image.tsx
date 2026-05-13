@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import sharp from "sharp";
 
 import { BrandIconSvg, PicaIconSvg } from "@/lib/og-icons";
-import { getPicasListBySlug } from "@/lib/picas";
+import { getPicasListBySlugFromDb } from "@/server/services/picas-lists";
 import { getPlacesForPicasList } from "@/server/services/picas";
 
 export const alt = "Hambuscador — picá curada";
@@ -49,7 +49,7 @@ async function loadDisplayFont(weight: 600 | 700): Promise<ArrayBuffer> {
 
 export default async function OgImage({ params }: { params: Promise<Params> }) {
   const { slug } = await params;
-  const list = getPicasListBySlug(slug);
+  const list = await getPicasListBySlugFromDb(slug);
   const [displayBold, displayBlack] = await Promise.all([
     loadDisplayFont(600).catch(() => null),
     loadDisplayFont(700).catch(() => null),

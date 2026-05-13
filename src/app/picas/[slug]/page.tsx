@@ -6,14 +6,15 @@ import { BottomNav } from "@/components/nav/bottom-nav";
 import { PicaIcon } from "@/components/place/pica-icon";
 import { PlaceCard } from "@/components/place/place-card";
 import { ShareButton } from "@/components/place/share-button";
-import { getPlacesForPicasList } from "@/lib/data";
-import { PICAS_LISTS } from "@/lib/picas";
+import { getActivePicasLists, getPlacesForPicasList } from "@/lib/data";
 
 type Params = { slug: string };
 
-// Pre-render todas las listas estáticas (catálogo cerrado).
-export function generateStaticParams() {
-  return PICAS_LISTS.map((l) => ({ slug: l.slug }));
+// Pre-render todas las listas activas. Si no hay DB (modo demo) cae al
+// hardcoded vía getActivePicasLists fallback.
+export async function generateStaticParams() {
+  const lists = await getActivePicasLists();
+  return lists.map((l) => ({ slug: l.slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<Params> }) {

@@ -25,6 +25,10 @@ import {
   getPicasListsWithCounts as getPicasListsWithCountsSvc,
 } from "@/server/services/picas";
 import {
+  getActivePicasLists as getActivePicasListsSvc,
+  getPicasListBySlugFromDb as getPicasListBySlugFromDbSvc,
+} from "@/server/services/picas-lists";
+import {
   getActiveComunas as getActiveComunasSvc,
   getAllComunas as getAllComunasSvc,
 } from "@/server/services/comunas";
@@ -117,24 +121,40 @@ export const getRecentlyApprovedPlaces = cache(
 
 /**
  * Picás (listas curadas) — resolución de criteria → places ordenados por popularidad.
- * Cache larga porque las listas son hardcoded y los places cambian poco.
+ * Las listas viven en `picas_lists` (DB) y se editan desde /admin/picas.
+ * Cache larga porque el set rara vez cambia.
  */
 export const getPlacesForPicasList = cache(
   async (slug: string) => {
-    const { getPicasListBySlug } = await import("@/lib/picas");
-    const list = getPicasListBySlug(slug);
+    const list = await getPicasListBySlugFromDbSvc(slug);
     if (!list) return null;
     const places = await getPlacesForPicasListSvc(list);
     return { list, places };
   },
   ["picas-list-by-slug"],
-  { revalidate: 300, tags: ["places"] },
+  { revalidate: 300, tags: ["places", "picas-lists"] },
 );
 
 export const getPicasListsWithCounts = cache(
   async () => getPicasListsWithCountsSvc(),
   ["picas-lists-counts"],
-  { revalidate: 300, tags: ["places"] },
+  { revalidate: 300, tags: ["places", "picas-lists"] },
+);
+
+/**
+ * Listas activas del index `/picas` (también usadas por sitemap y suggest).
+ * Cache larga — invalidan ediciones del admin vía tag `picas-lists`.
+ */
+export const getActivePicasLists = cache(
+  async () => getActivePicasListsSvc(),
+  ["picas-lists-active"],
+  { revalidate: 600, tags: ["picas-lists"] },
+);
+
+export const getPicasListBySlugFromDb = cache(
+  async (slug: string) => getPicasListBySlugFromDbSvc(slug),
+  ["picas-list-row-by-slug"],
+  { revalidate: 600, tags: ["picas-lists"] },
 );
 
 /**
