@@ -454,7 +454,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). Aplicada en Neon prod ✅.
 - `drizzle/2026-05-13-web-vitals.sql` — tabla `web_vitals` (id uuid, metric, value real, rating, path, metric_id, nav_type, created_at) con índices (metric, created_at DESC), (path, metric), (created_at DESC). Persistencia de Core Web Vitals reportadas desde el cliente vía `/api/vitals`. Aplicada en Neon prod ✅.
 - `drizzle/2026-05-13-email-digest.sql` — `users.email_digest_frequency text NOT NULL DEFAULT 'off'` con CHECK (off|daily|weekly), `users.last_digest_sent_at timestamptz`, índice parcial `users_email_digest_frequency_idx WHERE != 'off'`. Habilita opt-in al email digest. Aplicada en Neon prod ✅.
-- `drizzle/2026-05-13-picas-lists.sql` — tabla `picas_lists` (slug PK, title/hook/intro, icon CHECK, max_items, criteria jsonb, sort_order, is_active, timestamps) + índice `(is_active, sort_order)`. Habilita CRUD admin de listas curadas. Después de aplicar: `pnpm db:seed-picas` para upsert las 32 hardcoded. Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-13-picas-lists.sql` — tabla `picas_lists` (slug PK, title/hook/intro, icon CHECK, max_items, criteria jsonb, sort_order, is_active, timestamps) + índice `(is_active, sort_order)`. Habilita CRUD admin de listas curadas. Aplicada en Neon prod + `pnpm db:seed-picas` corrido ✅.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
@@ -803,7 +803,7 @@ Track: **CWV / Lighthouse audit** — 7 commits enfocados en perf, sin features 
 
 #### Código
 1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato → migrar a database sessions. No urgente.
-2. **Aplicar `2026-05-13-picas-lists.sql` en Neon prod + correr `pnpm db:seed-picas`** contra prod para inicializar las 32 listas. Sin esto, /picas usa el fallback hardcoded transparente.
+2. **Monetización Fase 1** — schema `subscriptions` + `/admin/promociones` (manual al inicio) + cron expiración. Ver memoria `monetization-roadmap`.
 
 #### Optimización
 - **Medir CWV delta** en `/admin/perf?dias=7` con tráfico real 24-48h post-deploy de sesión 10 (quick wins) + sesión 11 (refactor picas).
