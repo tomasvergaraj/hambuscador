@@ -1,5 +1,6 @@
 import { IconArrowLeft, IconList, IconMap } from "@tabler/icons-react";
 import { cookies } from "next/headers";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { after } from "next/server";
 
@@ -8,8 +9,16 @@ import { LiveSearchInput } from "@/components/place/live-search-input";
 import { MapSearchInput } from "@/components/place/map-search-input";
 import { PicaIcon } from "@/components/place/pica-icon";
 import { PlaceCard } from "@/components/place/place-card";
-import { PlacesMap } from "@/components/place/places-map";
 import { SearchFilters } from "@/components/place/search-filters";
+
+// PlacesMap pesa lo suyo (MapLibre + pmtiles + CSS de maplibre-gl). En vista
+// `lista` (default y mayoritaria) nunca se renderiza — `next/dynamic` lo
+// emite como chunk aparte, así su JS solo se descarga cuando el usuario
+// pide `?vista=mapa`.
+const PlacesMap = dynamic(
+  () =>
+    import("@/components/place/places-map").then((m) => ({ default: m.PlacesMap })),
+);
 import { searchPlaces } from "@/lib/data";
 import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { PICAS_LISTS, type PicasList } from "@/lib/picas";
