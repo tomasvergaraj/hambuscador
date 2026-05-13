@@ -677,6 +677,50 @@ export async function getRecentlyApprovedPlaces(opts?: {
 }
 
 /**
+ * Trae todos los places aprobados con bayes rating + approvedAt computados,
+ * pre-sorted por bayes DESC (después review_count, después rating_avg).
+ *
+ * Diseñado para alimentar `/picas` index — el JS filtra el array contra cada
+ * `PicasListCriteria`, evitando ~32 queries paralelas en cold cache.
+ */
+export type PlaceForPicasIndex = Place & {
+  approvedAt: Date | null;
+  bayesRating: number;
+};
+
+export async function getApprovedPlacesForPicasIndex(): Promise<PlaceForPicasIndex[]> {
+  if (!isDbConfigured()) {
+    const mock = await searchPlacesMock("");
+    return mock.items.map((p) => ({
+      ...p,
+      approvedAt: null,
+      bayesRating: ((p.reviewCount * p.rating) + 5 * 4.0) / (p.reviewCount + 5),
+    }));
+  }
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      place: places,
+      bayesRating: sql<number>`(
+        (COALESCE(${places.reviewCount}, 0)::numeric * COALESCE(${places.ratingAvg}, 4.0) + 5 * 4.0)
+        / (COALESCE(${places.reviewCount}, 0) + 5)
+      )`.as("bayes_rating"),
+    })
+    .from(places)
+    .where(eq(places.moderationStatus, "approved"))
+    .orderBy(
+      sql`bayes_rating DESC, review_count DESC, rating_avg DESC NULLS LAST`,
+    );
+
+  return rows.map((r) => ({
+    ...dbPlaceToUi(r.place),
+    approvedAt: r.place.approvedAt,
+    bayesRating: Number(r.bayesRating),
+  }));
+}
+
+/**
  * Slugs (+ updatedAt) de todos los locales aprobados. Para el sitemap.
  * Solo retorna lo mínimo necesario — nada de fotos, reseñas, etc.
  */
