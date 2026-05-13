@@ -1,17 +1,35 @@
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 
 import { getReviewById } from "@/lib/data";
 import { BrandIconSvg, StarFilledSvg } from "@/lib/og-icons";
 
 // ============================================================================
 // OG image dinámica de una reseña individual. Compartir /r/[id] muestra el
-// rating, snippet del texto, autor y nombre del local. Sin foto del local /
-// reseña — gradient mostaza para mantener < 100 KB (límite de WhatsApp).
+// rating, snippet del texto, autor y nombre del local. Si el reviewer subió
+// foto, va como background del top band con overlay carbon — más auténtico
+// que el gradient. Sin foto cae al gradient mostaza original.
+// Pasamos por sharp (mozjpeg q70) para mantener <200KB con foto incrustada.
 // ============================================================================
 
 export const alt = "Reseña en Hambuscador";
 export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const contentType = "image/jpeg";
+
+const JPEG_QUALITY = 70;
+
+async function respondJpeg(og: ImageResponse): Promise<Response> {
+  const pngBuf = Buffer.from(await og.arrayBuffer());
+  const jpegBuf = await sharp(pngBuf)
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toBuffer();
+  return new Response(jpegBuf as unknown as BodyInit, {
+    headers: {
+      "content-type": "image/jpeg",
+      "cache-control": "public, immutable, no-transform, max-age=86400",
+    },
+  });
+}
 
 const MOSTAZA = "#E8A02C";
 const MOSTAZA_DEEP = "#C8862A";
@@ -65,67 +83,109 @@ export default async function ReviewOgImage({
   ];
 
   if (!review) {
-    return new ImageResponse(
+    return respondJpeg(
+      new ImageResponse(
+        (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              background: CREMA,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "Bricolage, system-ui, sans-serif",
+              fontSize: 96,
+              color: CARBON,
+              fontWeight: 700,
+            }}
+          >
+            hambuscador
+          </div>
+        ),
+        { ...size, fonts },
+      ),
+    );
+  }
+
+  const snippet = truncateForOg(review.text, 220);
+  const heroPhoto = review.photos?.[0] ?? null;
+
+  return respondJpeg(
+    new ImageResponse(
       (
         <div
           style={{
             width: "100%",
             height: "100%",
+            display: "flex",
+            flexDirection: "column",
             background: CREMA,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
             fontFamily: "Bricolage, system-ui, sans-serif",
-            fontSize: 96,
-            color: CARBON,
-            fontWeight: 700,
           }}
         >
-          hambuscador
-        </div>
-      ),
-      { ...size, fonts },
-    );
-  }
-
-  const snippet = truncateForOg(review.text, 220);
-
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          background: CREMA,
-          fontFamily: "Bricolage, system-ui, sans-serif",
-        }}
-      >
-        {/* Top band: rating + autor */}
-        <div
-          style={{
-            height: 200,
-            width: "100%",
-            display: "flex",
-            position: "relative",
-            overflow: "hidden",
-            background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
-            padding: "32px 48px",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {/* Stars */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <StarFilledSvg
-                key={i}
-                size={56}
-                color={i < review.rating ? CARBON : "rgba(31,27,23,0.18)"}
-              />
-            ))}
-          </div>
+          {/* Top band: rating + autor sobre foto (si hay) o gradient */}
+          <div
+            style={{
+              height: 200,
+              width: "100%",
+              display: "flex",
+              position: "relative",
+              overflow: "hidden",
+              background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
+              padding: "32px 48px",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            {heroPhoto ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroPhoto}
+                  alt=""
+                  width={1200}
+                  height={200}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: 1200,
+                    height: 200,
+                    objectFit: "cover",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    background:
+                      "linear-gradient(180deg, rgba(31,27,23,0.55) 0%, rgba(31,27,23,0.30) 50%, rgba(31,27,23,0.65) 100%)",
+                  }}
+                />
+              </>
+            ) : null}
+            {/* Stars — contraste según haya foto (dark overlay) o gradient */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                position: "relative",
+              }}
+            >
+              {Array.from({ length: 5 }).map((_, i) => {
+                const filled = i < review.rating;
+                const color = heroPhoto
+                  ? filled
+                    ? CREMA
+                    : "rgba(245,239,230,0.30)"
+                  : filled
+                    ? CARBON
+                    : "rgba(31,27,23,0.18)";
+                return <StarFilledSvg key={i} size={56} color={color} />;
+              })}
+            </div>
 
           {/* Autor pill */}
           <div
@@ -305,8 +365,9 @@ export default async function ReviewOgImage({
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      ),
+      { ...size, fonts },
     ),
-    { ...size, fonts },
   );
 }

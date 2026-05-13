@@ -1,11 +1,28 @@
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 
 import { BrandIconSvg, PicaIconSvg } from "@/lib/og-icons";
 import { getPicasListBySlug } from "@/lib/picas";
+import { getPlacesForPicasList } from "@/server/services/picas";
 
 export const alt = "Hambuscador — picá curada";
 export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const contentType = "image/jpeg";
+
+const JPEG_QUALITY = 70;
+
+async function respondJpeg(og: ImageResponse): Promise<Response> {
+  const pngBuf = Buffer.from(await og.arrayBuffer());
+  const jpegBuf = await sharp(pngBuf)
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toBuffer();
+  return new Response(jpegBuf as unknown as BodyInit, {
+    headers: {
+      "content-type": "image/jpeg",
+      "cache-control": "public, immutable, no-transform, max-age=86400",
+    },
+  });
+}
 
 type Params = { slug: string };
 
@@ -48,108 +65,166 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
   ];
 
   if (!list) {
-    return new ImageResponse(
+    return respondJpeg(
+      new ImageResponse(
+        (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              background: CREMA,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "Bricolage, system-ui, sans-serif",
+              fontSize: 96,
+              color: CARBON,
+              fontWeight: 700,
+            }}
+          >
+            hambuscador
+          </div>
+        ),
+        { ...size, fonts },
+      ),
+    );
+  }
+
+  // Foto del primer local de la lista (cuando existe) — preview real del
+  // contenido. Si la lista está vacía o el primer place no tiene foto,
+  // mantenemos el gradient.
+  const places = await getPlacesForPicasList(list).catch(() => []);
+  const heroPhoto = places.find((p) => p.photos?.[0])?.photos?.[0] ?? null;
+
+  return respondJpeg(
+    new ImageResponse(
       (
         <div
           style={{
             width: "100%",
             height: "100%",
+            display: "flex",
+            flexDirection: "column",
             background: CREMA,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
             fontFamily: "Bricolage, system-ui, sans-serif",
-            fontSize: 96,
-            color: CARBON,
-            fontWeight: 700,
           }}
         >
-          hambuscador
-        </div>
-      ),
-      { ...size, fonts },
-    );
-  }
-
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          background: CREMA,
-          fontFamily: "Bricolage, system-ui, sans-serif",
-        }}
-      >
-        {/* Banda hero con gradient mostaza + emoji XL */}
-        <div
-          style={{
-            height: 360,
-            width: "100%",
-            display: "flex",
-            position: "relative",
-            background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
-            overflow: "hidden",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {/* Patrón decorativo */}
+          {/* Banda hero: foto si hay, sino gradient con icono */}
           <div
             style={{
-              position: "absolute",
-              top: -80,
-              left: -80,
-              width: 320,
-              height: 320,
-              borderRadius: 9999,
-              background: "rgba(255,255,255,0.10)",
+              height: 360,
+              width: "100%",
               display: "flex",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              bottom: -120,
-              right: -80,
-              width: 420,
-              height: 420,
-              borderRadius: 9999,
-              background: "rgba(255,255,255,0.06)",
-              display: "flex",
-            }}
-          />
-          {/* Icono gigante (SVG inline, ver paths abajo) */}
-          <div
-            style={{
-              display: "flex",
-              filter: "drop-shadow(0 8px 24px rgba(31,27,23,0.35))",
+              position: "relative",
+              background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
+              overflow: "hidden",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <PicaIconSvg name={list.icon} size={220} color={CARBON} />
+            {heroPhoto ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroPhoto}
+                  alt=""
+                  width={1200}
+                  height={360}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: 1200,
+                    height: 360,
+                    objectFit: "cover",
+                  }}
+                />
+                {/* Overlay carbon → texto legible y pill arriba */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    background:
+                      "linear-gradient(180deg, rgba(31,27,23,0.50) 0%, rgba(31,27,23,0.15) 30%, rgba(31,27,23,0.15) 70%, rgba(31,27,23,0.60) 100%)",
+                  }}
+                />
+                {/* Icono pequeño abajo derecha — branding sutil sin tapar la foto */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 28,
+                    right: 28,
+                    display: "flex",
+                    background: CREMA_DEEP,
+                    width: 80,
+                    height: 80,
+                    borderRadius: 18,
+                    padding: 14,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    filter: "drop-shadow(0 4px 12px rgba(31,27,23,0.45))",
+                  }}
+                >
+                  <PicaIconSvg name={list.icon} size={52} color={CARBON} />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Patrón decorativo del fallback */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: -80,
+                    left: -80,
+                    width: 320,
+                    height: 320,
+                    borderRadius: 9999,
+                    background: "rgba(255,255,255,0.10)",
+                    display: "flex",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: -120,
+                    right: -80,
+                    width: 420,
+                    height: 420,
+                    borderRadius: 9999,
+                    background: "rgba(255,255,255,0.06)",
+                    display: "flex",
+                  }}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    filter: "drop-shadow(0 8px 24px rgba(31,27,23,0.35))",
+                  }}
+                >
+                  <PicaIconSvg name={list.icon} size={220} color={CARBON} />
+                </div>
+              </>
+            )}
+            {/* Pill superior con tipo de lista — visible en ambos modos */}
+            <div
+              style={{
+                position: "absolute",
+                top: 28,
+                left: 28,
+                background: CARBON,
+                color: CREMA,
+                padding: "10px 20px",
+                borderRadius: 999,
+                fontSize: 22,
+                fontWeight: 700,
+                display: "flex",
+                textTransform: "uppercase",
+                letterSpacing: 2,
+              }}
+            >
+              picá curada
+            </div>
           </div>
-          {/* Pill superior con tipo de lista */}
-          <div
-            style={{
-              position: "absolute",
-              top: 28,
-              left: 28,
-              background: CARBON,
-              color: CREMA,
-              padding: "10px 20px",
-              borderRadius: 999,
-              fontSize: 22,
-              fontWeight: 700,
-              display: "flex",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-            }}
-          >
-            picá curada
-          </div>
-        </div>
 
         {/* Info */}
         <div
@@ -236,8 +311,9 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      ),
+      { ...size, fonts },
     ),
-    { ...size, fonts },
   );
 }
