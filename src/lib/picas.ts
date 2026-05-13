@@ -108,6 +108,123 @@ export const PICAS_LISTS: PicasList[] = [
       minRating: 4.5,
     },
   },
+  {
+    slug: "nuevitas",
+    title: "nuevitas",
+    hook: "las recién llegadas que vale la pena probar",
+    intro:
+      "picás aprobadas en los últimos dos meses. catálogo fresco, ranking todavía sin asentar — el momento perfecto para descubrirlas antes que el resto.",
+    icon: "sparkles",
+    maxItems: 12,
+    criteria: {
+      approvedWithinDays: 60,
+    },
+  },
+
+  // ── por estilo de cocina ─────────────────────────────────────────────────
+  {
+    slug: "clasica-de-chile",
+    title: "la clásica de Chile",
+    hook: "la hamburguesa de toda la vida, hecha bien",
+    intro:
+      "sin pirotecnia ni ingredientes raros: pan, carne, queso, tomate, lechuga y la salsa que corresponde. estas picás respetan la receta clásica y la hacen como Dios manda.",
+    icon: "flame",
+    maxItems: 12,
+    criteria: {
+      cuisines: ["clasica"],
+      minRating: 4.0,
+    },
+  },
+  {
+    slug: "artesanal",
+    title: "artesanal pura",
+    hook: "carne molida en casa, bun horneado del día",
+    intro:
+      "la escuela artesanal: blends propios de carne, panes que vienen del horno de al lado, salsas hechas a mano. estas picás se la juegan con el proceso y se nota en el sabor.",
+    icon: "flame",
+    maxItems: 12,
+    criteria: {
+      cuisines: ["artesanal"],
+      minRating: 4.0,
+    },
+  },
+  {
+    slug: "sin-gluten",
+    title: "sin gluten, sin sacrificar",
+    hook: "celíaco y hamburguesero, juntos al fin",
+    intro:
+      "no hay nada peor que comer un pan gomoso y resignarse. estas picás tienen opciones sin gluten que están a la altura: bun real, sabor real, sin pedir disculpas.",
+    icon: "leaf",
+    maxItems: 10,
+    criteria: {
+      cuisines: ["sin-gluten"],
+    },
+  },
+  {
+    slug: "gourmet",
+    title: "gourmet sin pretensión",
+    hook: "técnica fina, plato serio, sin ser fome",
+    intro:
+      "wagyu, hongos confitados, brioche de la casa, salsas reducidas: estas picás juegan en la liga alta sin caer en el postureo. cuando querés una hamburguesa que sorprenda.",
+    icon: "sparkles",
+    maxItems: 10,
+    criteria: {
+      cuisines: ["gourmet"],
+      minRating: 4.5,
+    },
+  },
+
+  // ── por comuna grande ────────────────────────────────────────────────────
+  {
+    slug: "lo-mejor-de-providencia",
+    title: "lo mejor de Providencia",
+    hook: "del barrio italia a Pedro de Valdivia",
+    intro:
+      "Providencia concentra una escena hamburguesera densa: smash de barrio, gourmet de calle, picás escondidas en pasajes. estas son las que la comunidad rankea arriba.",
+    icon: "map-pin",
+    maxItems: 12,
+    criteria: { comunaSlug: "providencia" },
+  },
+  {
+    slug: "lo-mejor-de-las-condes",
+    title: "lo mejor de Las Condes",
+    hook: "del Apumanque a El Golf",
+    intro:
+      "Las Condes tiene de todo: cadenas, gourmet de oficina, picás de barrio que sobreviven al boom inmobiliario. estas son las mejor calificadas del sector oriente.",
+    icon: "map-pin",
+    maxItems: 12,
+    criteria: { comunaSlug: "las-condes" },
+  },
+  {
+    slug: "lo-mejor-de-nunoa",
+    title: "lo mejor de Ñuñoa",
+    hook: "Plaza Ñuñoa, Irarrázaval y alrededores",
+    intro:
+      "Ñuñoa tiene una identidad propia: picás de barrio con clientela fiel, smash artesanal, opciones veggie. estas son las que no podés saltarte si vivís por ahí.",
+    icon: "map-pin",
+    maxItems: 12,
+    criteria: { comunaSlug: "nunoa" },
+  },
+  {
+    slug: "lo-mejor-de-vina-del-mar",
+    title: "lo mejor de Viña del Mar",
+    hook: "playa, paseo y picá perfecta",
+    intro:
+      "Viña suma escena propia, separada de Valpo: terrazas con vista, locales junto al mar, smash de barrio. estas son las hamburgueserías que vale cruzar para probar.",
+    icon: "map-pin",
+    maxItems: 10,
+    criteria: { comunaSlug: "vina-del-mar" },
+  },
+  {
+    slug: "lo-mejor-de-concepcion",
+    title: "lo mejor de Concepción",
+    hook: "la capital del sur también pone lo suyo",
+    intro:
+      "Concepción tiene escena propia: universitarios, gastronomía local fuerte, identidad penquista. estas picás demuestran que el sur no se anda con chicas en hamburguesa.",
+    icon: "map-pin",
+    maxItems: 10,
+    criteria: { comunaSlug: "concepcion" },
+  },
 
   // ── regionales (las 16 regiones de Chile) ────────────────────────────────
   // listas que devuelven 0 places se ocultan en el index `/picas` vía
