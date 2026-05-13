@@ -135,6 +135,7 @@ export function PlaceCard({
             fill
             className="object-cover"
             sizes="78px"
+            quality={70}
           />
         ) : (
           <IconPhoto
