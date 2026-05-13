@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
 
 import { SessionProvider } from "@/components/auth/session-provider";
-import { WebVitals } from "@/components/perf/web-vitals";
-import { PwaInstaller } from "@/components/pwa/pwa-installer";
+import { DeferredChrome } from "@/components/pwa/deferred-chrome";
 import { auth } from "@/server/auth";
 
 import "./globals.css";
@@ -93,8 +92,7 @@ export default async function RootLayout({
       <body>
         <SessionProvider session={session}>
           {children}
-          <PwaInstaller />
-          <WebVitals />
+          <DeferredChrome />
         </SessionProvider>
       </body>
     </html>
