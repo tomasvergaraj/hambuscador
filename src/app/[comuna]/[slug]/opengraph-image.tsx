@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 
 import { getPlaceBySlug } from "@/lib/data";
 import { BrandIconSvg, StarFilledSvg } from "@/lib/og-icons";
@@ -18,7 +19,27 @@ import { BrandIconSvg, StarFilledSvg } from "@/lib/og-icons";
 // Si quisiéramos edge, habría que migrar a un driver compatible (Neon http).
 export const alt = "Hambuscador — picá hamburguesera";
 export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const contentType = "image/jpeg";
+
+// ============================================================================
+// next/og solo emite PNG. WhatsApp/IG recomiendan <600 KB y una foto PNG
+// pesa fácil 600KB+. Pasamos por sharp (mozjpeg q70) que baja a ~80-160 KB
+// preservando suficiente calidad para preview social.
+// ============================================================================
+const JPEG_QUALITY = 70;
+
+async function respondJpeg(og: ImageResponse): Promise<Response> {
+  const pngBuf = Buffer.from(await og.arrayBuffer());
+  const jpegBuf = await sharp(pngBuf)
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toBuffer();
+  return new Response(jpegBuf as unknown as BodyInit, {
+    headers: {
+      "content-type": "image/jpeg",
+      "cache-control": "public, immutable, no-transform, max-age=86400",
+    },
+  });
+}
 
 type Params = { comuna: string; slug: string };
 
@@ -93,62 +114,66 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
   // Fallback genérico si el place no existe (edge case: url cacheada de un
   // local rechazado/borrado).
   if (!place) {
-    return new ImageResponse(
+    return respondJpeg(
+      new ImageResponse(
+        (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              background: CREMA,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "Bricolage, system-ui, sans-serif",
+              fontSize: 96,
+              color: CARBON,
+              fontWeight: 700,
+            }}
+          >
+            hambuscador
+          </div>
+        ),
+        { ...size, fonts },
+      ),
+    );
+  }
+
+  const cuisinesLabel = place.cuisines.slice(0, 3).join(" · ");
+  const heroPhoto = place.photos?.[0] ?? null;
+
+  // Hero: si el local tiene foto principal, va como background con overlay
+  // dark para legibilidad. Sino caemos al gradient mostaza + watermark.
+  // El paso por sharp (JPEG q70 mozjpeg) mantiene el OG bajo el límite
+  // recomendado de WhatsApp aún con foto incrustada.
+  return respondJpeg(
+    new ImageResponse(
       (
         <div
           style={{
             width: "100%",
             height: "100%",
+            display: "flex",
+            flexDirection: "column",
             background: CREMA,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
             fontFamily: "Bricolage, system-ui, sans-serif",
-            fontSize: 96,
-            color: CARBON,
-            fontWeight: 700,
           }}
         >
-          hambuscador
-        </div>
-      ),
-      { ...size, fonts },
-    );
-  }
-
-  const cuisinesLabel = place.cuisines.slice(0, 3).join(" · ");
-
-  // ⚠️ Decisión: el hero SIEMPRE es el gradient con watermark, NUNCA la foto
-  // del local. Razón: next/og emite PNG y las fotos rasterizadas a PNG pesan
-  // ~600 KB+ por sí solas, lo que nos saca del límite recomendado de WhatsApp
-  // (<600 KB). El gradient comprime a ~80-150 KB con PNG.
-  // La foto del local queda como protagonista en la ficha real (/[comuna]/[slug]).
-  //
-  // El logo SÍ se incrusta cuando existe — pesa poco (PNG cuadrado, miles de
-  // bytes vs cientos de KB de una foto) y aporta reconocimiento de marca.
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          background: CREMA,
-          fontFamily: "Bricolage, system-ui, sans-serif",
-        }}
-      >
-        <div
-          style={{
-            height: 320,
-            width: "100%",
-            display: "flex",
-            position: "relative",
-            overflow: "hidden",
-            background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
-          }}
-        >
-          <Hero name={place.name} logoUrl={place.logo} />
+          <div
+            style={{
+              height: 320,
+              width: "100%",
+              display: "flex",
+              position: "relative",
+              overflow: "hidden",
+              background: `linear-gradient(135deg, ${MOSTAZA} 0%, ${MOSTAZA_DEEP} 100%)`,
+            }}
+          >
+            <Hero
+              name={place.name}
+              logoUrl={place.logo}
+              photoUrl={heroPhoto}
+            />
 
           {/* Pill rating */}
           {place.rating > 0 && (
@@ -269,18 +294,113 @@ export default async function OgImage({ params }: { params: Promise<Params> }) {
           </div>
         </div>
       </div>
+      ),
+      { ...size, fonts },
     ),
-    { ...size, fonts },
   );
 }
 
 // ============================================================================
-// Hero del OG — gradient mostaza con watermark del nombre. En el centro:
-//  - logo del local en card crema (cuando existe)
-//  - sino BrandIconSvg grande (placeholder de marca Hambuscador)
+// Hero del OG. Dos modos:
+//   - Con foto (place.photos[0]): foto full-cover + overlay carbon → texto
+//     legible. Si hay logo, va flotando arriba. Sin watermark del nombre
+//     (la foto ya es protagonista; agregar 200px de texto encima molesta).
+//   - Sin foto: gradient mostaza + círculos + watermark del nombre. El
+//     logo (si existe) ocupa el centro; sino BrandIconSvg.
 // ============================================================================
 
-function Hero({ name, logoUrl }: { name: string; logoUrl?: string }) {
+function Hero({
+  name,
+  logoUrl,
+  photoUrl,
+}: {
+  name: string;
+  logoUrl?: string | null;
+  photoUrl?: string | null;
+}) {
+  if (photoUrl) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Foto del local — full cover */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photoUrl}
+          alt=""
+          width={1200}
+          height={320}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: 1200,
+            height: 320,
+            objectFit: "cover",
+          }}
+        />
+        {/* Overlay carbon — gradiente top→bottom para que la pill rating
+            arriba derecha y el resto del chrome queden legibles. */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            background:
+              "linear-gradient(180deg, rgba(31,27,23,0.45) 0%, rgba(31,27,23,0.10) 35%, rgba(31,27,23,0.10) 70%, rgba(31,27,23,0.55) 100%)",
+          }}
+        />
+
+        {/* Logo en card crema si existe — flota top-left con sombra */}
+        {logoUrl ? (
+          <div
+            style={{
+              position: "absolute",
+              top: 24,
+              left: 24,
+              display: "flex",
+              width: 96,
+              height: 96,
+              background: CREMA_DEEP,
+              borderRadius: 18,
+              padding: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              filter: "drop-shadow(0 4px 12px rgba(31, 27, 23, 0.45))",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={name}
+              width={72}
+              height={72}
+              style={{ objectFit: "contain", width: 72, height: 72 }}
+            />
+          </div>
+        ) : null}
+
+        {/* Tira inferior tipo cinta carbon */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 8,
+            background: `linear-gradient(90deg, ${CARBON} 0%, ${CARBON_SOFT} 50%, ${CARBON} 100%)`,
+            display: "flex",
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       style={{

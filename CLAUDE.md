@@ -769,7 +769,7 @@ PMTiles propio en R2 ✅ (2026-05-13). Bucket separado `hambuscador-tiles`, cust
 
 #### Código
 1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
-2. **OG con foto del local**: requiere agregar `sharp` (~25MB) para post-procesar PNG → JPEG quality 70. Hoy todos los OG usan gradient. Si querés foto, evaluar tradeoff bundle vs visual.
+2. **OG con foto del local** ✅ (2026-05-13). `sharp` 0.34.5 incluido. Place OG (`[comuna]/[slug]/opengraph-image.tsx`) ahora usa `place.photos[0]` como hero background con overlay carbon para legibilidad; logo flota top-left si existe. ImageResponse PNG → sharp jpeg q70 mozjpeg → Response image/jpeg. Mantiene <200KB para preview WhatsApp/IG. Sin foto cae al gradient mostaza+watermark anterior. Picas y review OGs siguen con gradient (más livianos y sin foto que sumar).
 3. **PWA share target POST/files**: hoy soportamos GET title/text/url. Para recibir fotos via share (caso: usuario en galería → comparte foto al wizard), agregar method:POST al manifest + SW listener que cachea blobs en Cache API y un endpoint que redirige al cliente que lee del cache.
 4. **Más listas curadas /picas**: por comuna específica (Providencia, Las Condes), por horario nocturno, por temática. Mover a tabla `picas_lists` con CRUD admin cuando se justifique.
 5. **Email digest opt-in** para notificaciones (batch diario/semanal, no per-evento). Hoy todo pull + push web.
