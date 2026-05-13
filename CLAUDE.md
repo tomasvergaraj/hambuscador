@@ -452,6 +452,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-12-follows.sql` — tabla `follows` (PK compuesto, CHECK no-self, índice followee). Sistema seguidores. Idempotente. Aplicada en Neon prod ✅.
 - `drizzle/2026-05-12-push-subscriptions.sql` — tabla `push_subscriptions` (endpoint UNIQUE, p256dh, auth, user_agent). Web Push API. Idempotente. Aplicada en Neon prod ✅.
 - `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). Aplicada en Neon prod ✅.
+- `drizzle/2026-05-13-web-vitals.sql` — tabla `web_vitals` (id uuid, metric, value real, rating, path, metric_id, nav_type, created_at) con índices (metric, created_at DESC), (path, metric), (created_at DESC). Persistencia de Core Web Vitals reportadas desde el cliente vía `/api/vitals`. Aplicada en Neon prod ✅.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 

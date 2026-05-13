@@ -7,6 +7,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -465,6 +466,45 @@ export const follows = pgTable(
  *
  * Migration: drizzle/2026-05-09-password-reset-tokens.sql
  */
+/**
+ * Métricas de Web Vitals (CLS, LCP, INP, FCP, TTFB, FID) reportadas desde el
+ * cliente. Una fila por evento del web-vitals lib. Volumen alto pero acotado:
+ * ~5 métricas por page-load. Mantener retention corto (ej. 90d) para que
+ * los queries P75 sigan baratos.
+ *
+ * Patrón: el cliente postea a /api/vitals con sendBeacon (no bloquea unload).
+ * El endpoint inserta vía `logVital()` con next/after() para no agregar latencia.
+ *
+ * Migration: drizzle/2026-05-13-web-vitals.sql
+ */
+export const webVitals = pgTable(
+  "web_vitals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** CLS | LCP | INP | FCP | TTFB | FID — uppercased al insertar. */
+    metric: text("metric").notNull(),
+    /** Valor de la métrica en su unidad nativa (ms para tiempos, score para CLS). */
+    value: real("value").notNull(),
+    /** "good" | "needs-improvement" | "poor" según thresholds de web-vitals lib. */
+    rating: text("rating"),
+    /** Pathname donde se midió (ej. "/", "/buscar", "/[comuna]/[slug]"). */
+    path: text("path"),
+    /** ID único del evento (del web-vitals lib) — útil pa dedup defensivo. */
+    metricId: text("metric_id"),
+    /** "navigate" | "reload" | "back-forward" | "prerender" | "restore". */
+    navType: text("nav_type"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    metricCreatedIdx: index("web_vitals_metric_created_idx").on(
+      table.metric,
+      sql`${table.createdAt} DESC`,
+    ),
+    pathMetricIdx: index("web_vitals_path_metric_idx").on(table.path, table.metric),
+    createdAtIdx: index("web_vitals_created_at_idx").on(sql`${table.createdAt} DESC`),
+  }),
+);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -495,6 +535,7 @@ export type DbSearchLog = typeof searchLogs.$inferSelect;
 export type DbRegion = typeof regions.$inferSelect;
 export type DbComuna = typeof comunas.$inferSelect;
 export type DbPlaceClaim = typeof placeClaims.$inferSelect;
+export type DbWebVital = typeof webVitals.$inferSelect;
 export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type DbNotification = typeof notifications.$inferSelect;
 export type NewDbNotification = typeof notifications.$inferInsert;

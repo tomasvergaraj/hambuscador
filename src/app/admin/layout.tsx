@@ -93,6 +93,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         >
           búsquedas
         </Link>
+        <Link
+          href="/admin/perf"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          perf
+        </Link>
       </nav>
       {children}
     </div>
