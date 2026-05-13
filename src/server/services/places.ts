@@ -699,22 +699,23 @@ export async function getApprovedPlacesForPicasIndex(): Promise<PlaceForPicasInd
   }
 
   const db = getDb();
+  // Bayes inline pa evitar alias-resolution issues en ORDER BY (la versión
+  // anterior con `.as("bayes_rating")` aliased en ORDER BY producía un
+  // orden distinto al de searchPlaces popularity en algunos casos —
+  // espejamos exactamente la expresión que usa fallbackOrder en searchPlaces).
+  const bayesExpr = sql<number>`(
+    (COALESCE(${places.reviewCount}, 0)::numeric * COALESCE(${places.ratingAvg}, 4.0) + 5 * 4.0)
+    / (COALESCE(${places.reviewCount}, 0) + 5)
+  )`;
   const rows = await db
     .select({
       place: places,
-      bayesRating: sql<number>`(
-        (COALESCE(${places.reviewCount}, 0)::numeric * COALESCE(${places.ratingAvg}, 4.0) + 5 * 4.0)
-        / (COALESCE(${places.reviewCount}, 0) + 5)
-      )`.as("bayes_rating"),
+      bayesRating: bayesExpr,
     })
     .from(places)
     .where(eq(places.moderationStatus, "approved"))
-    // Mismo orden que searchPlaces sort="popularity": featured boost primero,
-    // después bayes, después review_count, después rating raw. Pa que el
-    // preview de cada lista (matching[0]) coincida con el top que ve el user
-    // al abrir /picas/[slug] (que sí usa searchPlaces popularity).
     .orderBy(
-      sql`is_featured DESC, bayes_rating DESC, review_count DESC, rating_avg DESC NULLS LAST`,
+      sql`is_featured DESC, ${bayesExpr} DESC, review_count DESC, rating_avg DESC NULLS LAST`,
     );
 
   return rows.map((r) => ({
