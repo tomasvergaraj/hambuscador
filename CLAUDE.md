@@ -759,8 +759,11 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 ### Próximos pasos pendientes
 
 #### Deploy / infra
-1. **PMTiles propio** — bajar `chile.pmtiles` desde maps.protomaps.com/builds, subir a R2, setear `NEXT_PUBLIC_PMTILES_URL`. Reemplaza el OSM raster por basemap vectorial estilizado.
-2. **VAPID keys generadas + en Vercel** — si todavía no se setearon `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`, el `<PushToggle />` queda oculto sin error UI. Generar en máquina segura: `node -e "console.log(require('web-push').generateVAPIDKeys())"`.
+
+VAPID keys configuradas en Vercel ✅ (2026-05-13).
+PMTiles propio en R2 ✅ (2026-05-13). Bucket separado `hambuscador-tiles`, custom domain `tiles.hambuscador.cl`, CORS pa hambuscador.cl + *.vercel.app + localhost:3000. Archivo `chile.pmtiles` (595 MB, z0-z14, bbox -110,-56,-66,-17, build 20260512 de Protomaps). Setear en Vercel: `NEXT_PUBLIC_PMTILES_URL=https://tiles.hambuscador.cl/chile.pmtiles` → redeploy. El código (`places-map.tsx`, `pin-picker-map.tsx`) cae a OSM raster cuando la env var está vacía.
+
+**Refresh:** correr `pmtiles extract https://build.protomaps.com/YYYYMMDD.pmtiles chile.pmtiles --bbox=-110,-56,-66,-17 --maxzoom=14` con un build reciente, subir al mismo bucket con `rclone copy chile.pmtiles r2:hambuscador-tiles/`. Daily builds quedan ~3 meses retenidos; ideal refresh trimestral.
 
 #### Código
 1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
