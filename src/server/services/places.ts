@@ -318,15 +318,18 @@ export async function searchPlaces(opts: {
     // Featured boost: destacados (publicidad) suben primero en sorts donde
     // la "honestidad" no es central. Distance y recent quedan sin boost
     // (el usuario eligió un eje específico — respetarlo es transparente).
+    // `id ASC` final pa quebrar ties determinísticamente — sin esto, queries
+    // sobre subsets distintos (e.g. /picas/[slug] vs el index) pueden romper
+    // ties en orden distinto, desalineando preview y detalle.
     const fallbackOrder =
       sort === "recent"
-        ? sql`created_at DESC`
+        ? sql`created_at DESC, id ASC`
         : sort === "popularity"
           ? sql`is_featured DESC, (
               (COALESCE(review_count, 0)::numeric * COALESCE(rating_avg, 4.0) + 5 * 4.0)
               / (COALESCE(review_count, 0) + 5)
-            ) DESC, review_count DESC, rating_avg DESC NULLS LAST`
-          : sql`is_featured DESC, rating_avg DESC NULLS LAST`;
+            ) DESC, review_count DESC, rating_avg DESC NULLS LAST, id ASC`
+          : sql`is_featured DESC, rating_avg DESC NULLS LAST, id ASC`;
     const rows = await db
       .select()
       .from(places)
@@ -715,7 +718,12 @@ export async function getApprovedPlacesForPicasIndex(): Promise<PlaceForPicasInd
     .from(places)
     .where(eq(places.moderationStatus, "approved"))
     .orderBy(
-      sql`is_featured DESC, ${bayesExpr} DESC, review_count DESC, rating_avg DESC NULLS LAST`,
+      // `id ASC` final pa quebrar ties determinísticamente — sin esto, dos
+      // places con mismo is_featured/bayes/review_count/rating_avg pueden
+      // retornar en cualquier orden, y la query del detalle (subset de
+      // Valparaíso) puede romper ties distinto que esta (todo Chile). Eso
+      // hace que matching[0] del index ≠ items[0] del detalle.
+      sql`is_featured DESC, ${bayesExpr} DESC, review_count DESC, rating_avg DESC NULLS LAST, id ASC`,
     );
 
   return rows.map((r) => ({
