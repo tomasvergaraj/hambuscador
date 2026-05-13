@@ -155,6 +155,25 @@ export type VitalsTotals = {
   uniquePaths: number;
 };
 
+/**
+ * Cleanup de retention — borra mediciones anteriores a `days` (default 90).
+ * Para que P75/P95 se mantengan baratos a la larga. Defensivo: floor de 7
+ * (no podés borrar todo y dejar la tabla sin datos por accidente).
+ *
+ * Returns count de filas borradas — útil para los logs del cron de mantenimiento.
+ */
+export async function deleteOldWebVitals(opts?: { days?: number }): Promise<number> {
+  if (!isDbConfigured()) return 0;
+  const days = Math.max(7, opts?.days ?? 90);
+  const db = getDb();
+  const result = await db.execute(sql`
+    DELETE FROM web_vitals
+    WHERE created_at < NOW() - INTERVAL '1 day' * ${days}
+  `);
+  // pg DELETE retorna rowCount en el response del driver.
+  return Number((result as unknown as { rowCount?: number }).rowCount ?? 0);
+}
+
 export async function getVitalsTotals(opts?: { days?: number }): Promise<VitalsTotals> {
   if (!isDbConfigured()) return { totalEvents: 0, uniquePaths: 0 };
   const { days = 7 } = opts ?? {};

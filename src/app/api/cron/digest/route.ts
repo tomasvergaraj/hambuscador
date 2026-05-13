@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { sendDigestsForFrequency } from "@/server/services/email-digest";
+import { deleteOldWebVitals } from "@/server/services/web-vitals";
 
 /**
  * Endpoint del cron de email digest. Lo invoca Vercel Cron con dos schedules
@@ -51,5 +52,21 @@ export async function GET(req: NextRequest) {
     summary.failed,
   );
 
-  return Response.json(summary);
+  // Piggyback maintenance en el run weekly — Hobby tier nos limita a 2 crons,
+  // así que el lunes 12:00 UTC también limpia web_vitals viejos para que
+  // P75/P95 sigan baratos. Retention controlable via env (default 90d).
+  let maintenance: { webVitalsDeleted: number } | null = null;
+  if (frequency === "weekly") {
+    const retentionDays = Number(process.env.CWV_RETENTION_DAYS) || 90;
+    const deleted = await deleteOldWebVitals({ days: retentionDays });
+    maintenance = { webVitalsDeleted: deleted };
+    console.log(
+      "[cron/maintenance] web_vitals deleted=",
+      deleted,
+      "retention=",
+      retentionDays,
+    );
+  }
+
+  return Response.json({ ...summary, maintenance });
 }
