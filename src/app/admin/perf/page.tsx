@@ -1,12 +1,14 @@
 import { IconActivity, IconRoute } from "@tabler/icons-react";
 
 import {
+  getTopPathsByCount,
   getVitalsSummary,
   getVitalsTotals,
   getWorstPathsByMetric,
   KNOWN_METRICS,
-  type VitalsSummaryRow,
+  type PathCountRow,
   type PathP75Row,
+  type VitalsSummaryRow,
   type WebVitalMetric,
 } from "@/server/services/web-vitals";
 
@@ -26,11 +28,12 @@ export default async function AdminPerfPage({
   const requestedDays = Number(sp.dias);
   const days = ALLOWED_DAYS.has(requestedDays) ? requestedDays : 7;
 
-  const [summary, totals, worstLcp, worstInp] = await Promise.all([
+  const [summary, totals, worstLcp, worstInp, topPaths] = await Promise.all([
     getVitalsSummary({ days }),
     getVitalsTotals({ days }),
     getWorstPathsByMetric({ metric: "LCP", days, limit: 8 }),
     getWorstPathsByMetric({ metric: "INP", days, limit: 8 }),
+    getTopPathsByCount({ days, limit: 10 }),
   ]);
 
   return (
@@ -65,6 +68,19 @@ export default async function AdminPerfPage({
           </span>
         </div>
         <MetricsTable rows={summary} />
+      </section>
+
+      {/* Top paths por visitas */}
+      <section className="mb-6">
+        <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+          <h2 className="font-display font-semibold text-base text-carbon">
+            rutas más visitadas
+          </h2>
+          <span className="text-[11px] text-bronceado">
+            proxy: 1 evento LCP ≈ 1 page-view
+          </span>
+        </div>
+        <TopPathsTable rows={topPaths} />
       </section>
 
       {/* Worst paths por LCP */}
@@ -240,6 +256,57 @@ function DistributionBar({
       <span className="text-[10px] text-bronceado tabular-nums shrink-0">
         {gPct.toFixed(0)}/{nPct.toFixed(0)}/{pPct.toFixed(0)}
       </span>
+    </div>
+  );
+}
+
+function TopPathsTable({ rows }: { rows: PathCountRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="text-xs text-tinta-suave bg-crema-deep/60 border border-crema-edge rounded-xl px-3 py-4 text-center">
+        sin datos suficientes en este rango.
+      </div>
+    );
+  }
+  const total = rows.reduce((acc, r) => acc + r.count, 0);
+  const top = rows[0]?.count ?? 0;
+  return (
+    <div className="bg-white border border-crema-edge rounded-xl overflow-hidden">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 bg-crema-deep border-b border-crema-edge text-[10px] uppercase tracking-wider text-bronceado font-medium">
+        <span>ruta</span>
+        <span className="text-right">vistas</span>
+        <span className="text-right">% del top</span>
+      </div>
+      <ul>
+        {rows.map((r) => {
+          const pct = top > 0 ? (r.count / top) * 100 : 0;
+          return (
+            <li
+              key={r.path}
+              className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 border-b border-crema-edge last:border-0 items-center relative"
+            >
+              {/* Barra de proporción al fondo, sutil */}
+              <div
+                className="absolute inset-y-0 left-0 bg-mostaza/10"
+                style={{ width: `${pct}%` }}
+                aria-hidden="true"
+              />
+              <span className="text-xs text-carbon font-mono truncate relative z-10">
+                {r.path}
+              </span>
+              <span className="text-xs text-carbon font-medium text-right tabular-nums relative z-10">
+                {r.count.toLocaleString("es-CL")}
+              </span>
+              <span className="text-[11px] text-tinta-suave text-right tabular-nums relative z-10">
+                {pct.toFixed(0)}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="px-3 py-2 bg-crema-deep/60 border-t border-crema-edge text-[11px] text-bronceado">
+        total mostrado: {total.toLocaleString("es-CL")} vistas
+      </div>
     </div>
   );
 }

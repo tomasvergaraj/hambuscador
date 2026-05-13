@@ -155,6 +155,45 @@ export type VitalsTotals = {
   uniquePaths: number;
 };
 
+export type PathCountRow = {
+  path: string;
+  count: number;
+};
+
+/**
+ * Top paths por cantidad de visitas. Proxy del visit count: filtra a la
+ * métrica LCP que fires una vez por navegación (CLS dispara múltiples veces
+ * por sesión y inflaría la cuenta). Filter NULL paths y mínimo de samples
+ * para evitar paths efímeros.
+ */
+export async function getTopPathsByCount(opts?: {
+  days?: number;
+  limit?: number;
+  minSamples?: number;
+}): Promise<PathCountRow[]> {
+  if (!isDbConfigured()) return [];
+  const { days = 7, limit = 10, minSamples = 3 } = opts ?? {};
+  const db = getDb();
+  const rows = await db.execute(sql`
+    SELECT path, COUNT(*)::int AS count
+    FROM web_vitals
+    WHERE metric = 'LCP'
+      AND path IS NOT NULL
+      AND created_at >= NOW() - INTERVAL '1 day' * ${days}
+    GROUP BY path
+    HAVING COUNT(*) >= ${minSamples}
+    ORDER BY count DESC
+    LIMIT ${limit}
+  `);
+  return rows.rows.map((r) => {
+    const row = r as { path?: string; count?: number };
+    return {
+      path: String(row.path ?? ""),
+      count: Number(row.count ?? 0),
+    };
+  });
+}
+
 /**
  * Cleanup de retention — borra mediciones anteriores a `days` (default 90).
  * Para que P75/P95 se mantengan baratos a la larga. Defensivo: floor de 7
