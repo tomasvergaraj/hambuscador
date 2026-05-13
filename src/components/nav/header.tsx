@@ -1,10 +1,9 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/brand/logo";
+
+import { BackButton } from "./back-button";
 
 export type HeaderProps = {
   /**
@@ -33,15 +32,17 @@ export type HeaderProps = {
    * Si está seteado, el botón "atrás" navega a esta ruta en vez de hacer
    * `router.back()`. Útil para páginas-destino (tabs como /picas, /perfil)
    * donde el usuario espera volver a inicio, no a la página de origen.
+   * Cuando se pasa, el header se renderiza 100% en el server (sin JS).
    */
   backHref?: string;
 };
 
 /**
- * Header universal. Tres modos:
+ * Header universal — server component. Tres modos:
  * - `<Header />` o `<Header avatarInitials="JM" />` → logo + (avatar | iniciar sesión)
- * - `<Header title="..." />` → back arrow + título
- * - `<Header title="..." isModal />` → X + título
+ * - `<Header title="..." />` → back arrow + título (BackButton client island)
+ * - `<Header title="..." backHref="/" />` → back link + título (puro server)
+ * - `<Header title="..." isModal />` → X + título (BackButton client island)
  */
 export function Header({
   title,
@@ -51,14 +52,11 @@ export function Header({
   avatarImage,
   backHref,
 }: HeaderProps) {
-  const router = useRouter();
-
-  // Modo título (back/modal con texto centrado)
   if (title) {
-    const buttonClass =
-      "w-8 h-8 -ml-1 flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90";
     const Icon = isModal ? IconX : IconArrowLeft;
     const ariaLabel = isModal ? "Cerrar" : "Volver";
+    const buttonClass =
+      "w-8 h-8 -ml-1 flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90";
 
     return (
       <header className="flex items-center px-4 pt-3.5 pb-2">
@@ -67,14 +65,7 @@ export function Header({
             <Icon size={20} stroke={1.75} />
           </Link>
         ) : (
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label={ariaLabel}
-            className={buttonClass}
-          >
-            <Icon size={20} stroke={1.75} />
-          </button>
+          <BackButton isModal={isModal} />
         )}
         <div className="flex-1 text-center">
           <h1 className="font-display font-semibold text-base text-carbon leading-tight">
@@ -92,7 +83,7 @@ export function Header({
     );
   }
 
-  // Modo home (logo + avatar/iniciar sesión)
+  // Modo home (logo + avatar/iniciar sesión) — puro server, sin JS.
   return (
     <header className="flex items-center justify-between px-4 pt-3.5 pb-2">
       <Link href="/" aria-label="Hambuscador inicio">
