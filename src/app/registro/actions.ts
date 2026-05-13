@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { signIn } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
+import { sendWelcomeEmail } from "@/server/email";
 import { UserAlreadyExistsError, createUser } from "@/server/services/users";
 
 const registerSchema = z.object({
@@ -49,6 +50,12 @@ export async function registerUser(
     }
     throw error;
   }
+
+  // Bienvenida fire-and-forget. Si Resend falla, no rompemos el signup —
+  // el user ya quedó persistido. Sin RESEND_API_KEY cae al console log.
+  void sendWelcomeEmail(parsed.data.email, parsed.data.name).catch((err) => {
+    console.error("[registro] welcome email failed", err);
+  });
 
   // Autologueo con las mismas credenciales
   try {

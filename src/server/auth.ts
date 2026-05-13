@@ -144,6 +144,27 @@ export const authConfig: NextAuthConfig = {
     },
   },
 
+  events: {
+    /**
+     * Dispara cuando el DrizzleAdapter crea un user row nuevo — pasa con
+     * los signups de Google OAuth (primer sign-in). Para Credentials el
+     * createUser de nuestro service corre antes y el welcome email lo
+     * dispara la action en src/app/registro/actions.ts; este event no
+     * se ejecuta en ese path.
+     *
+     * Fire-and-forget — si Resend falla, no tira el signup.
+     */
+    async createUser({ user }) {
+      if (!user.email) return;
+      try {
+        const { sendWelcomeEmail } = await import("@/server/email");
+        await sendWelcomeEmail(user.email, user.name ?? null);
+      } catch (err) {
+        console.error("[auth/events.createUser] welcome email failed", err);
+      }
+    },
+  },
+
   // En dev habilita más logging
   debug: process.env.NODE_ENV === "development",
 };
