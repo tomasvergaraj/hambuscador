@@ -88,6 +88,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           usuarios
         </Link>
         <Link
+          href="/admin/picas"
+          className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
+        >
+          picás
+        </Link>
+        <Link
           href="/admin/search"
           className="text-xs py-2 hover:text-crema border-b-2 border-transparent hover:border-mostaza"
         >
