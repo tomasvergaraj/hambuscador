@@ -441,16 +441,17 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-07-hours-by-day-banned-cursor.sql` — `places.hours_by_day` jsonb, `users.banned_at` timestamptz, índice cursor `reviews_created_at_idx`. Ya en prod ✅.
 - `drizzle/2026-05-07-search-unaccent.sql` — `unaccent` extension, función IMMUTABLE `f_unaccent`, reindex GIN trigram en `f_unaccent(lower(name|comuna_label|specialty))`. Ya en prod ✅.
 - `drizzle/2026-05-08-search-logs.sql` — tabla `search_logs` con índices (normalized_query, created_at, partial zero-hit). Alimenta `/admin/search`. Ya en prod ✅.
-- `drizzle/2026-05-08-regions.sql` — tabla `regions(slug PK, label UNIQUE, lat, lng, zoom)` seedeada con las 16 regiones oficiales de Chile. ⏳ Pendiente aplicar en Neon prod.
-- `drizzle/2026-05-08-comunas.sql` — tabla `comunas(slug PK, label, region_slug FK, region_label, lat, lng)` seedeada con las 346 comunas oficiales (origen 2x3-la/geo-chile + reasignación Ñuble + Alhué + correcciones). ⏳ Pendiente aplicar en Neon prod (después de regions, hay FK).
-- `drizzle/2026-05-08-resync-aggregates.sql` — UPDATE one-shot que recalcula `places.rating_avg` y `review_count` excluyendo reseñas de baneados. Idempotente. ⏳ Pendiente aplicar en Neon prod (una vez después del deploy del ban retroactivo).
-- `drizzle/2026-05-08-place-contact-featured.sql` — `places.whatsapp` text + `places.is_featured` boolean default false. Cabe el contacto WhatsApp y el flag de publicidad (pin diferenciado en mapa). Idempotente. ⏳ Pendiente aplicar en Neon prod.
-- `drizzle/2026-05-08-place-logo.sql` — `places.logo` text. URL del logo de marca; reemplaza thumbnail en PlaceCard compact cuando existe. Solo admin lo setea. Idempotente. ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-08-regions.sql` — tabla `regions(slug PK, label UNIQUE, lat, lng, zoom)` seedeada con las 16 regiones oficiales de Chile. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-08-comunas.sql` — tabla `comunas(slug PK, label, region_slug FK, region_label, lat, lng)` seedeada con las 346 comunas oficiales (origen 2x3-la/geo-chile + reasignación Ñuble + Alhué + correcciones). Aplicada en Neon prod ✅.
+- `drizzle/2026-05-08-resync-aggregates.sql` — UPDATE one-shot que recalcula `places.rating_avg` y `review_count` excluyendo reseñas de baneados. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-08-place-contact-featured.sql` — `places.whatsapp` text + `places.is_featured` boolean default false. Cabe el contacto WhatsApp y el flag de publicidad (pin diferenciado en mapa). Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-08-place-logo.sql` — `places.logo` text. URL del logo de marca; reemplaza thumbnail en PlaceCard compact cuando existe. Solo admin lo setea. Idempotente. Aplicada en Neon prod ✅.
 - `drizzle/2026-05-08-place-claims.sql` — tabla `place_claims` para flow de "este es mi local". Aprobar setea `places.claimed_by` + `is_verified=true`. Owners pueden editar via `/mi-local/[id]/editar`. Idempotente. Aplicada en Neon prod ✅.
-- `drizzle/2026-05-12-notifications.sql` — tabla `notifications` (in-app feed) + índices por user_id/created_at y parcial unread. Idempotente. ⏳ Pendiente aplicar en Neon prod.
-- `drizzle/2026-05-12-follows.sql` — tabla `follows` (PK compuesto, CHECK no-self, índice followee). Sistema seguidores. Idempotente. ⏳ Pendiente aplicar en Neon prod.
-- `drizzle/2026-05-12-push-subscriptions.sql` — tabla `push_subscriptions` (endpoint UNIQUE, p256dh, auth, user_agent). Web Push API. Idempotente. ⏳ Pendiente aplicar en Neon prod.
-- `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). ⏳ Pendiente aplicar en Neon prod.
+- `drizzle/2026-05-09-password-reset-tokens.sql` — tabla `password_reset_tokens` (token PK, FK user, TTL ~1h, used_at). Alimenta `/recuperar`. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-12-notifications.sql` — tabla `notifications` (in-app feed) + índices por user_id/created_at y parcial unread. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-12-follows.sql` — tabla `follows` (PK compuesto, CHECK no-self, índice followee). Sistema seguidores. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-12-push-subscriptions.sql` — tabla `push_subscriptions` (endpoint UNIQUE, p256dh, auth, user_agent). Web Push API. Idempotente. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). Aplicada en Neon prod ✅.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
