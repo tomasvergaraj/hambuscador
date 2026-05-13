@@ -27,6 +27,13 @@ import {
 export const userRoleEnum = ["user", "admin"] as const;
 export type UserRole = (typeof userRoleEnum)[number];
 
+/**
+ * Frecuencia del email digest opt-in. `off` por default — ningún user existente
+ * recibe email automático. `daily`/`weekly` los gatilla un cron de Vercel.
+ */
+export const emailDigestFrequencyEnum = ["off", "daily", "weekly"] as const;
+export type EmailDigestFrequency = (typeof emailDigestFrequencyEnum)[number];
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name"),
@@ -51,6 +58,18 @@ export const users = pgTable("users", {
    * puede unban seteando a null y todo se restaura.
    */
   bannedAt: timestamp("banned_at", { withTimezone: true }),
+
+  /**
+   * Email digest opt-in. `off` (default) → no se envía nada por mail.
+   * `daily`/`weekly` → el cron de Vercel agrupa notificaciones no leídas
+   * y manda un solo email. Migration: drizzle/2026-05-13-email-digest.sql
+   */
+  emailDigestFrequency: text("email_digest_frequency", {
+    enum: emailDigestFrequencyEnum,
+  })
+    .notNull()
+    .default("off"),
+  lastDigestSentAt: timestamp("last_digest_sent_at", { withTimezone: true }),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

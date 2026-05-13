@@ -9,11 +9,13 @@ import {
   savePushSubscription,
   type PushSubscriptionInput,
 } from "@/server/services/push";
+import { setEmailDigestFrequency } from "@/server/services/email-digest";
 import {
   setUsername,
   updateUserProfile,
   UsernameTakenError,
 } from "@/server/services/users";
+import { emailDigestFrequencyEnum } from "@/server/db/schema";
 
 /**
  * Cierra la sesión y vuelve al home. `signOut` con `redirectTo` lanza
@@ -174,4 +176,26 @@ export async function unsubscribePushAction(endpoint: string): Promise<void> {
   if (!session?.user?.id) return;
   await removePushSubscription(endpoint);
   revalidatePath("/perfil");
+}
+
+const digestFrequencySchema = z.enum(emailDigestFrequencyEnum);
+
+/**
+ * Actualiza la frecuencia del email digest del usuario. Valores: off, daily,
+ * weekly. El cron de Vercel lo lee para decidir a quién mandar email cuándo.
+ */
+export async function setDigestFrequencyAction(
+  frequency: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "no autorizado" };
+  const parsed = digestFrequencySchema.safeParse(frequency);
+  if (!parsed.success) return { ok: false, error: "frecuencia inválida" };
+  try {
+    await setEmailDigestFrequency(session.user.id, parsed.data);
+    revalidatePath("/perfil");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "error" };
+  }
 }

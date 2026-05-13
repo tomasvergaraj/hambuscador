@@ -32,6 +32,7 @@ import {
   type MySubmissionItem,
 } from "@/server/services/users";
 import { signOutAction } from "./actions";
+import { DigestToggle } from "./digest-toggle";
 import { PushToggle } from "./push-toggle";
 import { UsernameSetter } from "./username-setter";
 
@@ -150,6 +151,10 @@ export default async function PerfilPage({
         {/* Push web — opt-in. Solo renderiza si VAPID public está configurada
             en el server y el browser soporta Notification + PushManager. */}
         <PushToggle vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+
+        {/* Email digest — opt-in. Off por default. El cron de Vercel manda
+            email batch solo si hay novedades. */}
+        <DigestToggle initial={dbUser?.emailDigestFrequency ?? "off"} />
 
         {/* Notificaciones — siempre visible. Badge tomate con count
             cuando hay no leídas. Patrón pull: el user entra al feed
