@@ -77,37 +77,55 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
 /**
  * Email transaccional para el flow de recuperar password.
- * El branding HTML es deliberadamente simple — texto + un botón mostaza.
+ * Branding alineado con el email digest: header con wordmark + tagline,
+ * card crema-deep, CTA mostaza, footer disclaimer. Action-oriented voice
+ * ("crear nueva contraseña", no "recuperar").
  */
 export async function sendPasswordResetEmail(
   to: string,
   resetUrl: string,
 ): Promise<SendEmailResult> {
-  const subject = "recupera tu contraseña en Hambuscador";
-  const text = `Para crear una nueva contraseña, abre este link (válido por 1 hora):\n\n${resetUrl}\n\nSi no fuiste tú, ignora este email — tu cuenta sigue segura.`;
+  const subject = "tu link para crear nueva contraseña";
+  const text = `hambuscador — la picá hamburguesera de Chile
+
+Recibimos una solicitud para crear una nueva contraseña en tu cuenta.
+
+Abre este link para hacerlo (válido por 1 hora):
+${resetUrl}
+
+Si no pediste este reseteo, ignora este email — tu cuenta sigue segura.`;
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#F5EFE6; padding:32px 16px;">
-      <div style="max-width:480px; margin:0 auto; background:#FAF6EE; border-radius:14px; padding:28px; color:#1F1B17;">
-        <h1 style="margin:0 0 16px; font-size:20px; font-weight:600;">recuperar contraseña</h1>
-        <p style="margin:0 0 16px; font-size:14px; line-height:1.5; color:#2A2520;">
-          Hola, recibimos una solicitud para resetear tu contraseña en Hambuscador.
-        </p>
-        <p style="margin:0 0 24px; font-size:14px; line-height:1.5; color:#2A2520;">
-          Toca el botón para crear una nueva. El link es válido por 1 hora.
-        </p>
-        <p style="margin:0 0 24px;">
-          <a href="${resetUrl}" style="display:inline-block; background:#E8A02C; color:#1F1B17; text-decoration:none; font-weight:600; padding:12px 20px; border-radius:10px; font-size:14px;">
-            crear nueva contraseña
-          </a>
-        </p>
-        <p style="margin:0 0 8px; font-size:12px; color:#6E5F4F;">
-          Si el botón no funciona, copia y pega este link en tu navegador:
-        </p>
-        <p style="margin:0 0 24px; font-size:12px; color:#6E5F4F; word-break:break-all;">
-          ${resetUrl}
-        </p>
-        <p style="margin:0; font-size:12px; color:#8B7355;">
-          Si no pediste este reseteo, ignora este email — tu cuenta sigue segura.
+      <div style="max-width:480px; margin:0 auto;">
+
+        <div style="text-align:center; padding:0 0 20px;">
+          <div style="font-size:24px; font-weight:700; color:#1F1B17; letter-spacing:-0.5px;">hambuscador</div>
+          <div style="font-size:11px; color:#8B7355; margin-top:2px;">la picá hamburguesera de Chile</div>
+        </div>
+
+        <div style="background:#FAF6EE; border:1px solid #E8DDD0; border-radius:14px; padding:28px; color:#1F1B17;">
+          <h1 style="margin:0 0 16px; font-size:20px; font-weight:600;">nueva contraseña</h1>
+          <p style="margin:0 0 16px; font-size:14px; line-height:1.5; color:#2A2520;">
+            Recibimos una solicitud para crear una nueva contraseña en tu cuenta.
+          </p>
+          <p style="margin:0 0 24px; font-size:14px; line-height:1.5; color:#2A2520;">
+            Apreta el botón para elegirla. El link vence en 1 hora.
+          </p>
+          <p style="margin:0 0 24px; text-align:center;">
+            <a href="${resetUrl}" style="display:inline-block; background:#E8A02C; color:#1F1B17; text-decoration:none; font-weight:600; padding:12px 22px; border-radius:10px; font-size:14px;">
+              crear nueva contraseña
+            </a>
+          </p>
+          <p style="margin:0 0 8px; font-size:12px; color:#6E5F4F;">
+            ¿el botón no funciona? Copia y pega este link en tu navegador:
+          </p>
+          <p style="margin:0 0 4px; font-size:12px; color:#6E5F4F; word-break:break-all;">
+            <a href="${resetUrl}" style="color:#6E5F4F;">${resetUrl}</a>
+          </p>
+        </div>
+
+        <p style="margin:16px 0 0; font-size:11px; color:#8B7355; line-height:1.5; text-align:center;">
+          si no pediste este reseteo, ignora este email — tu cuenta sigue segura.
         </p>
       </div>
     </div>
