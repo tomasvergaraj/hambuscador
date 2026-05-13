@@ -758,6 +758,10 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: Push web en iOS Safari requiere PWA instalada vía Add to Home Screen. Tab regular del browser NO recibe push.
 - ✅ Lección: re-follow no debe re-notificar. Pattern: `INSERT ... ON CONFLICT DO NOTHING RETURNING`, si la longitud retornada es 0 → ya seguía → no crear notification.
 
+### Hecho en esta sesión (2026-05-13 sesión 11 — picas index refactor)
+
+- **`getPicasListsWithCounts` de 32 queries → 1**. Nueva fn `getApprovedPlacesForPicasIndex` en `services/places.ts`: UNA select que trae todos los aprobados con `bayes_rating` computed + `approved_at`, pre-sorted por bayes DESC. `services/picas.ts` reescrita: filtra el array en JS contra cada `PicasListCriteria` (cuisines/priceRanges/comunaSlug/regionLabel/minRating/approvedWithinDays/openAfterHour). Como viene pre-sorted, `filter()[0]` ya es el top — count y preview en una pasada. Trade-off documentado: si el catálogo escala a 100k+ aprobados, full-scan JS se vuelve caro y conviene CTEs por lista en SQL. Hoy con ~1.5k aprobados × 32 listas = 48k iteraciones, instantáneo. Cache 5min se mantiene. Confirmado: `pnpm typecheck` + `pnpm lint` clean.
+
 ### Hecho en esta sesión (2026-05-13 sesión 10 — CWV pass)
 
 Track: **CWV / Lighthouse audit** — 7 commits enfocados en perf, sin features nuevos. (Sesión 9 cubrió listas /picas + Web Vitals DB + email digest + OG con foto + share files + welcome — ver memoria `project_state` / `Próximos pasos` para detalle.)
@@ -789,25 +793,18 @@ Track: **CWV / Lighthouse audit** — 7 commits enfocados en perf, sin features 
 ### Próximos pasos pendientes
 
 #### Deploy / infra
-
-VAPID keys configuradas en Vercel ✅ (2026-05-13).
-PMTiles propio en R2 ✅ (2026-05-13). Bucket separado `hambuscador-tiles`, custom domain `tiles.hambuscador.cl`, CORS pa hambuscador.cl + *.vercel.app + localhost:3000. Archivo `chile.pmtiles` (595 MB, z0-z14, bbox -110,-56,-66,-17, build 20260512 de Protomaps). Setear en Vercel: `NEXT_PUBLIC_PMTILES_URL=https://tiles.hambuscador.cl/chile.pmtiles` → redeploy. El código (`places-map.tsx`, `pin-picker-map.tsx`) cae a OSM raster cuando la env var está vacía.
-
-**Refresh:** correr `pmtiles extract https://build.protomaps.com/YYYYMMDD.pmtiles chile.pmtiles --bbox=-110,-56,-66,-17 --maxzoom=14` con un build reciente, subir al mismo bucket con `rclone copy chile.pmtiles r2:hambuscador-tiles/`. Daily builds quedan ~3 meses retenidos; ideal refresh trimestral.
+- **`NEXT_PUBLIC_PMTILES_URL`**: setear en Vercel a `https://tiles.hambuscador.cl/chile.pmtiles` + redeploy. Bucket + tile ya subidos (595MB, z0-14, build 20260512). Sin esto `/buscar?vista=mapa` cae al fallback OSM raster.
+- **Refresh PMTiles**: trimestral. `pmtiles extract https://build.protomaps.com/YYYYMMDD.pmtiles chile.pmtiles --bbox=-110,-56,-66,-17 --maxzoom=14` + `rclone copy chile.pmtiles r2:hambuscador-tiles/`.
 
 #### Código
-1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato habría que migrar a database sessions. No urgente.
-2. **OG con foto del local** ✅ (2026-05-13). `sharp` 0.34.5 incluido. Place OG (`[comuna]/[slug]/opengraph-image.tsx`) ahora usa `place.photos[0]` como hero background con overlay carbon para legibilidad; logo flota top-left si existe. ImageResponse PNG → sharp jpeg q70 mozjpeg → Response image/jpeg. Mantiene <200KB para preview WhatsApp/IG. Sin foto cae al gradient mostaza+watermark anterior. Picas y review OGs siguen con gradient (más livianos y sin foto que sumar).
-3. **PWA share target POST/files** ✅ (2026-05-13). Manifest declara `method: POST` + `enctype: multipart/form-data` + `files` param. SW (v3) intercepta el POST a `/api/share`, extrae los Files con FormData, los guarda en IndexedDB (`hambuscador-share/files/current`) y redirige a `/agregar?share=1`. AgregarWizard, al montar con shareIntent, consume IDB y pasa los Files como `initialFiles` al PhotoUploader, que los sube auto al R2. Single-use (IDB clear post-read), TTL 5min defensivo. Fallback: POST sin SW redirige a `/agregar?share=1` limpio.
-4. **Más listas curadas /picas**: por comuna específica (Providencia, Las Condes), por horario nocturno, por temática. Mover a tabla `picas_lists` con CRUD admin cuando se justifique.
-5. **Email digest opt-in** para notificaciones (batch diario/semanal, no per-evento). Hoy todo pull + push web.
-6. **Persistir Web Vitals**: hoy van a stdout, leíbles desde Vercel logs. Cuando se quiera trending, persistir en tabla `web_vitals` o forwardear a servicio (Plausible custom events, Datadog RUM).
+1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato → migrar a database sessions. No urgente.
+2. **Más listas curadas /picas**: por horario nocturno extendido, por temática estacional. Mover a tabla `picas_lists` con CRUD admin cuando se justifique editorial fluido.
+3. **Refactor Chip server/client**: usado pasivo dentro de `<Link>` en home genera `<a><button>` inválido. Split a `ChipDisplay` (span pasivo) vs `Chip` (button interactivo).
 
 #### Optimización
-- **Core Web Vitals target 90+** (PageSpeed Insights baseline pendiente). Quick wins de sesión 10 aplicados — pendiente medir delta con tráfico real en `/admin/perf?dias=7` (24-48h post-deploy).
-- **Lighthouse PWA score** verificar que pasa toda la check (offline, installable, manifest, share_target).
-- **Refactor pendiente**: Chip server/client split (usado pasivo en home dentro de Link genera `<a><button>` inválido). No urgente.
-- **Refactor pendiente**: `getPicasListsWithCounts` corre 32 queries paralelas pa el index de /picas. Cache 5min mitiga, pero un service light (count + 1 preview por lista en una sola query) bajaría TTFB en cold cache.
+- **Medir CWV delta** en `/admin/perf?dias=7` con tráfico real 24-48h post-deploy de sesión 10 (quick wins) + sesión 11 (refactor picas).
+- **Lighthouse PWA score** audit completo en hambuscador.cl mobile (offline, installable, manifest, share_target).
+- **Core Web Vitals target 90+** (PageSpeed Insights baseline pendiente).
 
 ## Recursos
 
