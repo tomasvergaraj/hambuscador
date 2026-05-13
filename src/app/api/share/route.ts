@@ -5,20 +5,20 @@ import type { NextRequest } from "next/server";
  * "Compartir" cuando el usuario tiene Hambuscador instalada y elige nuestra
  * app como destino del share.
  *
- * Manifest declara `method: GET` (no files por ahora) con params title/text/url.
+ * Dos modos según el content compartido:
  *
- * Heurística para decidir destino:
- *  1. Si la URL parece un local en Google Maps (maps.google, goo.gl/maps,
- *     google.com/maps) intentamos extraer el nombre del title o del path y
- *     mandamos al wizard `/agregar?nombre=...`. Usuario completa el resto.
- *  2. Si hay text/title pero ninguna URL útil → tratamos como query de búsqueda
- *     `/buscar?q=...`.
+ * GET (title/text/url):
+ *  1. Si la URL parece Google Maps → extrae nombre y redirige a
+ *     `/agregar?nombre=...`.
+ *  2. Si hay text/title sin URL → `/buscar?q=...`.
  *  3. Default → `/`.
  *
- * No usamos POST/multipart (que admite files) porque eso requiere SW listener
- * + caché temporal de los blobs para pasarlos al cliente — out of scope MVP.
- * Cuando se justifique, agregar `method: "POST"` al manifest y un handler en
- * `public/sw.js` que intercepte y guarde en Cache.
+ * POST (multipart con files):
+ * El manifest declara `files` param. En práctica el Service Worker intercepta
+ * el POST antes que llegue al server, extrae los Files, los guarda en IDB y
+ * redirige a `/agregar?share=1`. Este handler POST es un fallback defensivo
+ * para el caso (raro) en que SW no esté activo — redirige al wizard sin
+ * files; el user repite el flow manual.
  */
 const GOOGLE_MAPS_HOSTS = new Set([
   "maps.google.com",
@@ -80,4 +80,14 @@ function extractNameFromGoogleMaps(
   if (!candidate) return null;
   const cleaned = candidate.split(/\s+[-·]\s+/)[0]?.trim() ?? candidate;
   return cleaned.slice(0, 100) || null;
+}
+
+/**
+ * POST fallback: el SW debería haber interceptado esto y stasheado los files
+ * en IDB. Si llegamos acá, SW no está activo (PWA recién instalada, browser
+ * sin SW soportado, o se desregistró). Igual redirigimos al wizard limpio.
+ */
+export function POST(req: NextRequest) {
+  const url = new URL(req.url);
+  return Response.redirect(new URL("/agregar?share=1", url.origin), 303);
 }

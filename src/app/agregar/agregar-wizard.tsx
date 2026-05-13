@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+
+import { consumeSharedFiles } from "@/lib/shared-files-idb";
 
 import { Header } from "@/components/nav/header";
 import { AddressAutocomplete } from "@/components/place/address-autocomplete";
@@ -35,9 +37,16 @@ type Step = 1 | 2 | 3;
 export function AgregarWizard({
   comunas,
   initialName,
+  shareIntent = false,
 }: {
   comunas: Comuna[];
   initialName?: string;
+  /**
+   * True cuando el wizard se abrió desde el share target del PWA
+   * (/agregar?share=1). En ese caso intentamos leer files compartidos
+   * desde IDB y los precargamos en el PhotoUploader.
+   */
+  shareIntent?: boolean;
 }) {
   const [step, setStep] = useState<Step>(1);
 
@@ -55,6 +64,16 @@ export function AgregarWizard({
   const [instagram, setInstagram] = useState("");
   const [website, setWebsite] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  // Files que vienen del PWA share target via IDB. Se setean una sola vez al
+  // montar; PhotoUploader los consume y los sube al R2 automático.
+  const [sharedFiles, setSharedFiles] = useState<File[] | undefined>(undefined);
+
+  useEffect(() => {
+    if (!shareIntent) return;
+    void consumeSharedFiles().then((files) => {
+      if (files.length > 0) setSharedFiles(files);
+    });
+  }, [shareIntent]);
 
   // Validación step 1 → 2: chequea duplicado nombre+comuna en DB
   const [step1Error, setStep1Error] = useState<string | null>(null);
@@ -292,7 +311,12 @@ export function AgregarWizard({
         {step === 3 ? (
           <>
             <Field label="fotos">
-              <PhotoUploader value={photos} onChange={setPhotos} max={4} />
+              <PhotoUploader
+                value={photos}
+                onChange={setPhotos}
+                max={4}
+                initialFiles={sharedFiles}
+              />
             </Field>
 
             <Field label="teléfono (opcional)">

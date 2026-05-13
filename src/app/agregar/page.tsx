@@ -20,7 +20,7 @@ export const metadata = {
 export default async function AgregarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ nombre?: string }>;
+  searchParams: Promise<{ nombre?: string; share?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -29,7 +29,14 @@ export default async function AgregarPage({
 
   const sp = await searchParams;
   const initialName = sp.nombre?.trim().slice(0, 100) || undefined;
+  const shareIntent = sp.share === "1";
 
   const comunas = await getAllComunas();
-  return <AgregarWizard comunas={comunas} initialName={initialName} />;
+  return (
+    <AgregarWizard
+      comunas={comunas}
+      initialName={initialName}
+      shareIntent={shareIntent}
+    />
+  );
 }

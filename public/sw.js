@@ -11,7 +11,7 @@
 // activar el SW nuevo.
 // =============================================================================
 
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE_HTML = `hb-html-${VERSION}`;
 const CACHE_STATIC = `hb-static-${VERSION}`;
 const CACHE_ASSETS = `hb-assets-${VERSION}`;
@@ -56,11 +56,22 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  const url = new URL(req.url);
+
+  // PWA Share Target POST: el OS comparte fotos al PWA → browser hace POST
+  // multipart/form-data a /api/share. Lo interceptamos, guardamos los Files
+  // en IndexedDB, y redirigimos a /agregar?share=1 que los lee en cliente.
+  if (
+    req.method === "POST" &&
+    url.origin === self.location.origin &&
+    url.pathname === "/api/share"
+  ) {
+    event.respondWith(handleShareTargetPost(req));
+    return;
+  }
 
   // Solo manejar GET — POST de server actions debe pasar al network
   if (req.method !== "GET") return;
-
-  const url = new URL(req.url);
 
   // Mismo origen únicamente — externos (Nominatim, OSM tiles, etc) no se cachean
   if (url.origin !== self.location.origin) return;
@@ -125,6 +136,71 @@ async function staleWhileRevalidate(req, cacheName) {
     })
     .catch(() => cached || Response.error());
   return cached || fetchPromise;
+}
+
+// -----------------------------------------------------------------------------
+// PWA Share Target — POST handler
+// -----------------------------------------------------------------------------
+// Extrae Files del multipart FormData, los persiste en IDB (key "current") y
+// redirige al wizard /agregar?share=1, que al montar consume IDB y los pasa
+// al PhotoUploader. No tocamos el server — toda la lógica vive client-side.
+//
+// Si algo falla, redirigimos igual sin files (defensa: el wizard arranca
+// vacío como siempre y el user repite el flow manual).
+
+const SHARE_DB_NAME = "hambuscador-share";
+const SHARE_DB_VERSION = 1;
+const SHARE_STORE = "files";
+const SHARE_KEY = "current";
+
+function openShareDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHARE_DB_NAME, SHARE_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(SHARE_STORE)) {
+        db.createObjectStore(SHARE_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function putSharedFilesInIdb(files) {
+  if (!files.length) return;
+  const db = await openShareDb();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(SHARE_STORE, "readwrite");
+      tx.objectStore(SHARE_STORE).put({ files, createdAt: Date.now() }, SHARE_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function handleShareTargetPost(req) {
+  try {
+    const formData = await req.formData();
+    const files = [];
+    // El manifest declara params.files[].name = "photos"; algunos OS también
+    // mandan en otros campos — barremos todo y filtramos por tipo image/*.
+    for (const value of formData.values()) {
+      if (value instanceof File && value.type.startsWith("image/")) {
+        files.push(value);
+      }
+    }
+    if (files.length > 0) {
+      await putSharedFilesInIdb(files.slice(0, 4));
+    }
+  } catch (err) {
+    // Silent — el redirect siempre se dispara, el wizard arranca limpio si
+    // falló el handoff.
+  }
+  return Response.redirect("/agregar?share=1", 303);
 }
 
 // -----------------------------------------------------------------------------

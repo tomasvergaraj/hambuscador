@@ -2,7 +2,7 @@
 
 import { IconPhotoPlus, IconX } from "@tabler/icons-react";
 import Image from "next/image";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { requestUploadUrl } from "@/server/storage/actions";
 
@@ -19,6 +19,13 @@ type Props = {
    * Cantidad máxima de fotos. Default 4.
    */
   max?: number;
+  /**
+   * Files que vienen desde fuera (ej. PWA share target). Si se setea,
+   * el componente los sube automáticamente al montar y limpia la prop
+   * (el padre debería pasar un array nuevo solo cuando quiera disparar
+   * upload). Útil para pre-cargar fotos del share intent.
+   */
+  initialFiles?: File[];
 };
 
 /**
@@ -28,11 +35,30 @@ type Props = {
  * En modo demo sin storage configurado, el primer intento de upload muestra
  * un error explicativo.
  */
-export function PhotoUploader({ value, onChange, max = 4 }: Props) {
+export function PhotoUploader({
+  value,
+  onChange,
+  max = 4,
+  initialFiles,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Garantía de single-fire del autoupload: si el padre re-renderea con la
+  // misma referencia, no re-disparamos. Si pasa un array nuevo, sí.
+  const consumedInitialRef = useRef<File[] | null>(null);
+
+  useEffect(() => {
+    if (!initialFiles || initialFiles.length === 0) return;
+    if (consumedInitialRef.current === initialFiles) return;
+    consumedInitialRef.current = initialFiles;
+    // Convertimos a FileList vía DataTransfer (browser-native).
+    const dt = new DataTransfer();
+    for (const f of initialFiles) dt.items.add(f);
+    void handleFiles(dt.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFiles]);
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
