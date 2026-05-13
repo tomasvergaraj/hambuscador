@@ -709,8 +709,12 @@ export async function getApprovedPlacesForPicasIndex(): Promise<PlaceForPicasInd
     })
     .from(places)
     .where(eq(places.moderationStatus, "approved"))
+    // Mismo orden que searchPlaces sort="popularity": featured boost primero,
+    // después bayes, después review_count, después rating raw. Pa que el
+    // preview de cada lista (matching[0]) coincida con el top que ve el user
+    // al abrir /picas/[slug] (que sí usa searchPlaces popularity).
     .orderBy(
-      sql`bayes_rating DESC, review_count DESC, rating_avg DESC NULLS LAST`,
+      sql`is_featured DESC, bayes_rating DESC, review_count DESC, rating_avg DESC NULLS LAST`,
     );
 
   return rows.map((r) => ({

@@ -55,7 +55,10 @@ export async function getPicasListsWithCounts(): Promise<
     const top = matching[0];
     return {
       list,
-      count: matching.length,
+      // Cap a maxItems pa que el badge en PicaCard refleje lo que realmente
+      // se ve en /picas/[slug] (que limita a maxItems vía searchPlaces.limit).
+      // Sin cap, el badge dice 47 y la página detalle muestra 12 → contradice.
+      count: Math.min(matching.length, list.maxItems),
       preview: top ? stripIndexFields(top) : null,
     };
   });
