@@ -20,6 +20,7 @@ export async function getPlacesForPicasList(list: PicasList): Promise<Place[]> {
     regionLabel: list.criteria.regionLabel,
     minBayesRating: list.criteria.minRating,
     approvedWithinDays: list.criteria.approvedWithinDays,
+    openAfterHour: list.criteria.openAfterHour,
     sort: "popularity",
     limit: list.maxItems,
   });

@@ -28,6 +28,13 @@ export type PicasListCriteria = {
   minRating?: number;
   /** Días hacia atrás (filtro `approved_at >= NOW() - X days`). */
   approvedWithinDays?: number;
+  /**
+   * Filtro de "abre hasta tarde": al menos UN día de la semana cierra a esta
+   * hora o más tarde (formato `"HH:MM"`). También matchea horarios que envuelven
+   * la medianoche (close_time <= "05:59", asume cierre del día siguiente).
+   * Ej: openAfterHour: "23:00" → incluye locales que cierran a 23:30, 01:00, etc.
+   */
+  openAfterHour?: string;
 };
 
 export type PicasList = {
@@ -118,6 +125,18 @@ export const PICAS_LISTS: PicasList[] = [
     maxItems: 12,
     criteria: {
       approvedWithinDays: 60,
+    },
+  },
+  {
+    slug: "nocturnas",
+    title: "nocturnas",
+    hook: "abren hasta tarde, pa la post",
+    intro:
+      "después de salir del cine, de un evento, o cuando el plan se estiró: estas picás cierran a las 23 o más tarde. algunas hasta agarran madrugada. ideal pa la post.",
+    icon: "flame",
+    maxItems: 12,
+    criteria: {
+      openAfterHour: "23:00",
     },
   },
 

@@ -206,6 +206,12 @@ export async function searchPlaces(opts: {
   minBayesRating?: number;
   /** Solo locales aprobados en los últimos N días (sección "recién agregadas"). */
   approvedWithinDays?: number;
+  /**
+   * "Abre hasta tarde": al menos un día cierra a esta hora o más tarde (formato
+   * `"HH:MM"`). Wrap past midnight (close <= "05:59") también matchea. Usado
+   * por listas curadas tipo "nocturnas".
+   */
+  openAfterHour?: string;
 }): Promise<SearchResult> {
   if (!isDbConfigured()) {
     return searchPlacesMock(opts.query ?? "", {
@@ -231,6 +237,7 @@ export async function searchPlaces(opts: {
     limit = 30,
     minBayesRating,
     approvedWithinDays,
+    openAfterHour,
   } = opts;
   const db = getDb();
   const { groups, phrase } = tokenizeQuery(query ?? "");
@@ -256,6 +263,25 @@ export async function searchPlaces(opts: {
     baseConditions.push(
       sql`approved_at >= NOW() - INTERVAL '1 day' * ${approvedWithinDays}`,
     );
+  }
+
+  // "Abre hasta tarde": busca cualquier día en hours_by_day donde el close_time
+  // (posiciones 7-11 de "HH:MM-HH:MM") sea >= openAfterHour o wraps past midnight
+  // (close <= "05:59" implica cierre del día siguiente). El index GIST de jsonb
+  // no aplica acá — la query es full-scan filtrada por approved=true, pero el
+  // dataset acotado lo hace barato (cabe en RAM de Neon Free).
+  if (typeof openAfterHour === "string" && /^\d{2}:\d{2}$/.test(openAfterHour)) {
+    baseConditions.push(sql`
+      EXISTS (
+        SELECT 1 FROM jsonb_each_text(${places.hoursByDay}) AS e
+        WHERE e.value IS NOT NULL
+          AND e.value ~ '^[0-9][0-9]:[0-9][0-9]-[0-9][0-9]:[0-9][0-9]$'
+          AND (
+            substring(e.value FROM 7 FOR 5) >= ${openAfterHour}
+            OR substring(e.value FROM 7 FOR 5) <= '05:59'
+          )
+      )
+    `);
   }
 
   if (typeof minBayesRating === "number" && minBayesRating > 0) {
