@@ -78,6 +78,20 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Origen del bucket de fotos para emitir preconnect. Sin esto, el browser
+// arranca DNS+TLS recién cuando descubre el primer <img> — penaliza el LCP
+// de cualquier página con cards (que son casi todas). Con preconnect, el
+// handshake corre en paralelo al HTML.
+const PHOTOS_ORIGIN = (() => {
+  const raw = process.env.R2_PUBLIC_URL;
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+})();
+
 export default async function RootLayout({
   children,
 }: {
@@ -89,6 +103,14 @@ export default async function RootLayout({
   const session = await auth();
   return (
     <html lang="es" className={`${bricolage.variable} ${geist.variable}`}>
+      <head>
+        {PHOTOS_ORIGIN && (
+          <>
+            <link rel="preconnect" href={PHOTOS_ORIGIN} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={PHOTOS_ORIGIN} />
+          </>
+        )}
+      </head>
       <body>
         <SessionProvider session={session}>
           {children}
