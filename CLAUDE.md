@@ -454,6 +454,7 @@ Decisión final: **Vercel + Neon + Cloudflare R2** (NO se usó la VPS para la DB
 - `drizzle/2026-05-12-resync-photo-urls.sql` — UPDATE one-shot que reescribe URLs viejas (`pub-fbbb...r2.dev`) por el dominio custom (`photos.hambuscador.cl`) en `places.photos[]`, `places.logo`, `reviews.photos[]`, `place_claims.proof_url` y `users.image`. Idempotente (WHERE filtra host viejo). Aplicada en Neon prod ✅.
 - `drizzle/2026-05-13-web-vitals.sql` — tabla `web_vitals` (id uuid, metric, value real, rating, path, metric_id, nav_type, created_at) con índices (metric, created_at DESC), (path, metric), (created_at DESC). Persistencia de Core Web Vitals reportadas desde el cliente vía `/api/vitals`. Aplicada en Neon prod ✅.
 - `drizzle/2026-05-13-email-digest.sql` — `users.email_digest_frequency text NOT NULL DEFAULT 'off'` con CHECK (off|daily|weekly), `users.last_digest_sent_at timestamptz`, índice parcial `users_email_digest_frequency_idx WHERE != 'off'`. Habilita opt-in al email digest. Aplicada en Neon prod ✅.
+- `drizzle/2026-05-13-picas-lists.sql` — tabla `picas_lists` (slug PK, title/hook/intro, icon CHECK, max_items, criteria jsonb, sort_order, is_active, timestamps) + índice `(is_active, sort_order)`. Habilita CRUD admin de listas curadas. Después de aplicar: `pnpm db:seed-picas` para upsert las 32 hardcoded. Pendiente aplicar en Neon prod.
 
 Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`, correr en Neon SQL editor antes del push (las queries de Drizzle hacen `SELECT *` y rompen si una columna del schema no existe en DB).
 
@@ -758,9 +759,13 @@ Para futuras migraciones: crear archivo en `drizzle/AAAA-MM-DD-descripcion.sql`,
 - ✅ Lección: Push web en iOS Safari requiere PWA instalada vía Add to Home Screen. Tab regular del browser NO recibe push.
 - ✅ Lección: re-follow no debe re-notificar. Pattern: `INSERT ... ON CONFLICT DO NOTHING RETURNING`, si la longitud retornada es 0 → ya seguía → no crear notification.
 
-### Hecho en esta sesión (2026-05-13 sesión 11 — picas index refactor)
+### Hecho en esta sesión (2026-05-13 sesión 11 — picas refactor + CRUD admin)
 
-- **`getPicasListsWithCounts` de 32 queries → 1**. Nueva fn `getApprovedPlacesForPicasIndex` en `services/places.ts`: UNA select que trae todos los aprobados con `bayes_rating` computed + `approved_at`, pre-sorted por bayes DESC. `services/picas.ts` reescrita: filtra el array en JS contra cada `PicasListCriteria` (cuisines/priceRanges/comunaSlug/regionLabel/minRating/approvedWithinDays/openAfterHour). Como viene pre-sorted, `filter()[0]` ya es el top — count y preview en una pasada. Trade-off documentado: si el catálogo escala a 100k+ aprobados, full-scan JS se vuelve caro y conviene CTEs por lista en SQL. Hoy con ~1.5k aprobados × 32 listas = 48k iteraciones, instantáneo. Cache 5min se mantiene. Confirmado: `pnpm typecheck` + `pnpm lint` clean.
+- **`getPicasListsWithCounts` de 32 queries → 1**. Nueva fn `getApprovedPlacesForPicasIndex` en `services/places.ts`: UNA select que trae todos los aprobados con `bayes_rating` computed + `approved_at`, pre-sorted por bayes DESC. `services/picas.ts` reescrita: filtra el array en JS contra cada `PicasListCriteria`. Como viene pre-sorted, `filter()[0]` ya es el top — count y preview en una pasada. Trade-off: 100k+ aprobados rompe esto y conviene CTEs por lista en SQL.
+
+- **Chip server/client split**. `ChipDisplay` (server `<span>`) en `components/ui/chip-display.tsx` + helper `chipClassName` compartido. `Chip` ("use client", `<button>`) importa el helper. Home usa `ChipDisplay` en atajos del header → markup válido (antes `<a><button>`).
+
+- **picas_lists tabla + CRUD admin**. Las 32 listas hardcoded migran a tabla `picas_lists` (slug PK, title/hook/intro, icon, max_items, criteria jsonb, sort_order, is_active, timestamps). Migration `drizzle/2026-05-13-picas-lists.sql` + script `pnpm db:seed-picas` que UPSERT desde `PICAS_LISTS` hardcoded (idempotente vía `ON CONFLICT DO NOTHING`). Service `services/picas-lists.ts` con CRUD + fallback transparente al hardcoded si tabla vacía o sin DB. `lib/data.ts` expone `getActivePicasLists`/`getPicasListBySlugFromDb` cacheadas con tag `picas-lists`. Consumers refactor: sitemap, generateStaticParams, opengraph-image, /buscar findRelatedPica, /api/search/suggest, services/picas — todos async. Admin `/admin/picas` (index + `nueva` + `[slug]/editar`) con form estructurado: campos básicos + chips multi-select para cuisines/priceRanges + inputs structured para criteria. Tab "picás" en admin nav. Acciones server-side validan rol admin + zod, invalidan tag `picas-lists` + revalidatePath sitemap/picas.
 
 ### Hecho en esta sesión (2026-05-13 sesión 10 — CWV pass)
 
@@ -798,8 +803,7 @@ Track: **CWV / Lighthouse audit** — 7 commits enfocados en perf, sin features 
 
 #### Código
 1. **Service worker + JWT**: sesiones JWT siguen vivas hasta expiry (30d) aunque banees al user. Para invalidar inmediato → migrar a database sessions. No urgente.
-2. **Más listas curadas /picas**: por horario nocturno extendido, por temática estacional. Mover a tabla `picas_lists` con CRUD admin cuando se justifique editorial fluido.
-3. **Refactor Chip server/client**: usado pasivo dentro de `<Link>` en home genera `<a><button>` inválido. Split a `ChipDisplay` (span pasivo) vs `Chip` (button interactivo).
+2. **Aplicar `2026-05-13-picas-lists.sql` en Neon prod + correr `pnpm db:seed-picas`** contra prod para inicializar las 32 listas. Sin esto, /picas usa el fallback hardcoded transparente.
 
 #### Optimización
 - **Medir CWV delta** en `/admin/perf?dias=7` con tráfico real 24-48h post-deploy de sesión 10 (quick wins) + sesión 11 (refactor picas).
