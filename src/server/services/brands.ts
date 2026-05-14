@@ -79,7 +79,7 @@ export async function getBrandsForPlaceIds(
     .innerJoin(brands, eq(brands.id, places.brandId))
     .where(
       and(
-        sql`${places.id} = ANY(${placeIds})`,
+        inArray(places.id, placeIds),
         eq(brands.isActive, true),
       ),
     );
