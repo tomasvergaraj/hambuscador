@@ -7,7 +7,7 @@ import { z } from "zod";
 import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { auth } from "@/server/auth";
 import { isDbConfigured } from "@/server/db/client";
-import { getPlaceByIdForAdmin, updatePlace } from "@/server/services/places";
+import { deletePlace, getPlaceByIdForAdmin, updatePlace } from "@/server/services/places";
 
 const cuisineIds = CUISINE_TYPES.map((c) => c.id) as [string, ...string[]];
 const priceIds = PRICE_RANGES.map((p) => p.id) as [string, ...string[]];
@@ -166,4 +166,29 @@ export async function revokeOwnerAction(placeId: string): Promise<void> {
   revalidatePath(`/${existing.comuna}/${existing.slug}`);
   revalidatePath("/admin/places");
   revalidatePath(`/admin/places/${placeId}/edit`);
+}
+
+/**
+ * Borrado definitivo de un local. Acción destructiva — cascada reseñas,
+ * favoritos, eventos, claims, replies, subscriptions vía FK ON DELETE
+ * CASCADE. El caller debe confirmar con el admin antes (UI con prompt).
+ *
+ * Bind: .bind(null, placeId). Redirige a /admin/places al terminar.
+ */
+export async function deletePlaceAction(placeId: string): Promise<void> {
+  if (!isDbConfigured()) return;
+  const session = await auth();
+  if (!session?.user?.id) redirect("/iniciar-sesion");
+  if (session.user.role !== "admin") redirect("/");
+
+  const deleted = await deletePlace(placeId);
+
+  revalidateTag("places");
+  revalidatePath("/admin/places");
+  revalidatePath("/admin/moderacion");
+  revalidatePath("/sitemap.xml");
+  if (deleted) {
+    revalidatePath(`/${deleted.comuna}/${deleted.slug}`);
+  }
+  redirect("/admin/places");
 }

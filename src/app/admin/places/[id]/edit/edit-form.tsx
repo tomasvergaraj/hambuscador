@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { IconAlertCircle, IconCheck, IconUserX } from "@tabler/icons-react";
+import { IconAlertCircle, IconCheck, IconTrash, IconUserX } from "@tabler/icons-react";
 
 import {
   DaysSchedule,
@@ -20,7 +20,12 @@ import { CUISINE_TYPES, PRICE_RANGES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { Place } from "@/types/place";
 
-import { revokeOwnerAction, updatePlaceAction, type UpdatePlaceState } from "./actions";
+import {
+  deletePlaceAction,
+  revokeOwnerAction,
+  updatePlaceAction,
+  type UpdatePlaceState,
+} from "./actions";
 
 type Toast = { kind: "ok" | "error"; msg: string };
 
@@ -53,6 +58,7 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
   const [isClaimed, setIsClaimed] = useState<boolean>(place.isClaimed);
   const [revokePending, startRevokeTransition] = useTransition();
+  const [deletePending, startDeleteTransition] = useTransition();
 
   // Toast — re-trigger por cada nuevo state que devuelve el action
   // (useActionState produce nuevo objeto en cada submit, así el effect dispara
@@ -81,6 +87,26 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const hoursByDayJson = JSON.stringify(serializeSchedule(schedule));
   const hoursWeekdays = summarizeWeekdays(schedule);
   const hoursWeekends = summarizeWeekends(schedule);
+
+  function handleDeletePlace() {
+    // Doble confirm — la acción cascada borra reseñas/eventos/claims. Pedimos
+    // tipear el nombre del local pa evitar clicks accidentales.
+    const typed = window.prompt(
+      `BORRAR DEFINITIVAMENTE "${place.name}".\n\n` +
+        `Esto elimina el local + reseñas + favoritos + eventos + claims.\n` +
+        `Para confirmar, escribe el nombre del local exactamente:`,
+    );
+    if (typed !== place.name) {
+      if (typed !== null) {
+        window.alert("El nombre no coincide. Cancelado.");
+      }
+      return;
+    }
+    startDeleteTransition(async () => {
+      await deletePlaceAction(place.id);
+      // La action redirige a /admin/places, así que no llegamos acá normalmente.
+    });
+  }
 
   function handleRevokeOwner() {
     if (
@@ -357,6 +383,27 @@ export function EditPlaceForm({ place }: { place: Place }) {
           </p>
         </Section>
       )}
+
+      {/* Danger zone — borrar definitivo. Cascada todo lo relacionado.
+          Aislado del flow normal (no en el sticky bottom) pa que no se
+          confunda con guardar. */}
+      <Section title="zona peligrosa">
+        <p className="text-xs text-tinta-suave leading-relaxed">
+          Borrar elimina el local + reseñas + favoritos + eventos + claims +
+          subscriptions. Es irreversible. Para ocultar el local manteniendo
+          historial, prefiere cambiar el estado a <code>rejected</code> en
+          el panel de moderación.
+        </p>
+        <button
+          type="button"
+          onClick={handleDeletePlace}
+          disabled={deletePending}
+          className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-crema-deep bg-tomate hover:bg-tomate/90 px-3 py-2 rounded-md transition-colors disabled:opacity-60"
+        >
+          <IconTrash size={14} aria-hidden="true" />
+          {deletePending ? "borrando..." : "borrar definitivamente"}
+        </button>
+      </Section>
 
       <div className="sticky bottom-0 -mx-4 px-4 py-3 bg-crema border-t border-crema-edge flex gap-2 justify-end">
         <Button type="submit" variant="primary" size="md" disabled={pending}>

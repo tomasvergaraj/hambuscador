@@ -821,6 +821,31 @@ export async function approvePlace(placeId: string): Promise<void> {
 }
 
 /**
+ * Borra definitivamente un local. Cascada: reseñas, favoritos, eventos,
+ * claims, replies y subscriptions cascade vía FK ON DELETE CASCADE.
+ *
+ * Usar SOLO en casos donde el local no debería existir: duplicado, scrape
+ * basura, error tipográfico en el slug, datos inventados. Para "no quiero
+ * mostrar este local más" preferir `rejectPlace` (auditable, reversible).
+ *
+ * Retorna `{ comuna, slug }` del local borrado pa que el caller revalide
+ * el path público — devolverse null implica que ya no existía.
+ */
+export async function deletePlace(
+  placeId: string,
+): Promise<{ comuna: string; slug: string } | null> {
+  if (!isDbConfigured()) {
+    throw new Error("deletePlace requiere DATABASE_URL");
+  }
+  const db = getDb();
+  const [deleted] = await db
+    .delete(places)
+    .where(eq(places.id, placeId))
+    .returning({ comuna: places.comunaSlug, slug: places.slug });
+  return deleted ?? null;
+}
+
+/**
  * Rechaza un place. Lo deja en `rejected` para auditoría (no se borra).
  * TODO Fase 5: agregar `rejectionReason` text para feedback al submitter.
  */
