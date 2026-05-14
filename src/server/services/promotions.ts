@@ -294,6 +294,22 @@ export async function syncPromotionsRegion(
     .where(eq(promotions.placeId, placeId));
 }
 
+/** Cuenta promos owner-created esperando moderación. Pa badge admin nav. */
+export async function countPendingPromotions(): Promise<number> {
+  if (!isDbConfigured()) return 0;
+  const db = getDb();
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(promotions)
+    .where(
+      and(
+        eq(promotions.moderationStatus, "pending"),
+        gt(promotions.endsAt, new Date()),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
 export async function countActivePromotions(): Promise<number> {
   if (!isDbConfigured()) return 0;
   const db = getDb();

@@ -1,12 +1,18 @@
 import {
+  IconCheck,
   IconExternalLink,
+  IconPencil,
   IconPercentage,
   IconPlus,
   IconStarFilled,
+  IconX,
 } from "@tabler/icons-react";
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { listPromotionsForAdmin } from "@/server/services/promotions";
+
+import { approvePromotionAction, rejectPromotionAction } from "./actions";
 
 export const metadata = { title: "admin · ofertas" };
 export const dynamic = "force-dynamic";
@@ -33,13 +39,23 @@ const KIND_LABEL: Record<string, string> = {
 export default async function AdminOfertasPage() {
   const promos = await listPromotionsForAdmin({ limit: 200 });
   const now = Date.now();
+
+  // Pending: owner-created esperando moderación. Mostradas arriba de todo
+  // pa que no se acumulen sin atender. Filter por ends_at > now (no tiene
+  // sentido aprobar algo ya vencido).
+  const pending = promos.filter(
+    (p) =>
+      p.moderationStatus === "pending" && new Date(p.endsAt).getTime() > now,
+  );
   const active = promos.filter(
     (p) =>
       p.isActive &&
       p.moderationStatus === "approved" &&
       new Date(p.endsAt).getTime() > now,
   );
-  const past = promos.filter((p) => !active.includes(p));
+  const past = promos.filter(
+    (p) => !pending.includes(p) && !active.includes(p),
+  );
 
   return (
     <main className="px-4 py-5 flex-1 max-w-3xl mx-auto w-full">
@@ -49,6 +65,11 @@ export default async function AdminOfertasPage() {
             ofertas
           </h1>
           <p className="text-xs text-tinta-suave mt-0.5">
+            {pending.length > 0 && (
+              <span className="text-mostaza-deep font-medium">
+                {pending.length} pendiente{pending.length === 1 ? "" : "s"} ·{" "}
+              </span>
+            )}
             {active.length} activa{active.length === 1 ? "" : "s"} · {promos.length} total
           </p>
         </div>
@@ -60,6 +81,78 @@ export default async function AdminOfertasPage() {
           nueva
         </Link>
       </header>
+
+      {pending.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-[11px] uppercase tracking-widest text-mostaza-deep font-medium mb-2">
+            pendientes ({pending.length})
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {pending.map((p) => {
+              const Icon = KIND_ICON[p.kind] ?? IconStarFilled;
+              return (
+                <li
+                  key={p.id}
+                  className="bg-mostaza/5 border border-mostaza/40 rounded-xl p-3 flex flex-col gap-3"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 shrink-0 rounded-md bg-mostaza/20 text-mostaza-deep flex items-center justify-center">
+                      <Icon size={16} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display font-semibold text-sm text-carbon">
+                        {p.title}
+                      </h3>
+                      <p className="text-[11px] text-bronceado mt-0.5">
+                        {p.placeName} · {p.comunaLabel} ·{" "}
+                        {p.kind === "percent_discount" && p.discountPct
+                          ? `${p.discountPct}%`
+                          : KIND_LABEL[p.kind]}{" "}
+                        · hasta {formatDate(p.endsAt)}
+                      </p>
+                      {p.description && (
+                        <p className="text-[11px] text-carbon mt-1 leading-relaxed line-clamp-3">
+                          {p.description}
+                        </p>
+                      )}
+                    </div>
+                    <Link
+                      href={`/${p.comunaSlug}/${p.placeSlug}`}
+                      target="_blank"
+                      rel="noopener"
+                      aria-label="ver ficha"
+                      className="text-bronceado hover:text-carbon shrink-0"
+                    >
+                      <IconExternalLink size={14} />
+                    </Link>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <form action={rejectPromotionAction} className="flex-1">
+                      <input type="hidden" name="promoId" value={p.id} />
+                      <Button variant="secondary" size="sm" fullWidth type="submit">
+                        <IconX size={13} aria-hidden="true" /> rechazar
+                      </Button>
+                    </form>
+                    <form action={approvePromotionAction} className="flex-[2]">
+                      <input type="hidden" name="promoId" value={p.id} />
+                      <Button variant="primary" size="sm" fullWidth type="submit">
+                        <IconCheck size={13} aria-hidden="true" /> aprobar
+                      </Button>
+                    </form>
+                    <Link
+                      href={`/admin/ofertas/${p.id}`}
+                      aria-label="editar"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-bronceado hover:bg-mostaza/15 hover:text-carbon transition-colors"
+                    >
+                      <IconPencil size={14} />
+                    </Link>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="mb-6">
         <h2 className="text-[11px] uppercase tracking-widest text-bronceado font-medium mb-2">

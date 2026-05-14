@@ -9,6 +9,7 @@ type AdminNavProps = {
   pendingCount: number;
   claimsCount: number;
   activePromosCount: number;
+  pendingOfertasCount: number;
 };
 
 type Tab = {
@@ -21,6 +22,7 @@ export function AdminNav({
   pendingCount,
   claimsCount,
   activePromosCount,
+  pendingOfertasCount,
 }: AdminNavProps) {
   const pathname = usePathname();
 
@@ -63,7 +65,18 @@ export function AdminNav({
     },
     { href: "/admin/places", label: "locales" },
     { href: "/admin/brands", label: "cadenas" },
-    { href: "/admin/ofertas", label: "ofertas" },
+    {
+      href: "/admin/ofertas",
+      label: "ofertas",
+      badge:
+        pendingOfertasCount > 0
+          ? {
+              count: pendingOfertasCount,
+              tone: "tomate",
+              aria: `${pendingOfertasCount} oferta${pendingOfertasCount === 1 ? "" : "s"} pendiente${pendingOfertasCount === 1 ? "" : "s"}`,
+            }
+          : null,
+    },
     { href: "/admin/resenas", label: "reseñas" },
     { href: "/admin/usuarios", label: "usuarios" },
     { href: "/admin/picas", label: "picás" },

@@ -131,3 +131,25 @@ export async function deletePromotionAction(promoId: string) {
   revalidatePath("/");
   redirect("/admin/ofertas");
 }
+
+/** Aprueba una promo pending. Pasa a visible en home + map + ficha. */
+export async function approvePromotionAction(formData: FormData) {
+  await requireAdmin();
+  const id = formData.get("promoId");
+  if (typeof id !== "string" || !id) throw new Error("promoId requerido");
+  await updatePromotion(id, { moderationStatus: "approved" });
+  revalidateTag("places");
+  revalidatePath("/admin/ofertas");
+  revalidatePath("/");
+}
+
+/** Rechaza una promo. Queda invisible al público; admin la ve en histórico. */
+export async function rejectPromotionAction(formData: FormData) {
+  await requireAdmin();
+  const id = formData.get("promoId");
+  if (typeof id !== "string" || !id) throw new Error("promoId requerido");
+  await updatePromotion(id, { moderationStatus: "rejected" });
+  revalidateTag("places");
+  revalidatePath("/admin/ofertas");
+  revalidatePath("/");
+}
