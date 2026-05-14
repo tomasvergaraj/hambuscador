@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
 import {
@@ -184,6 +184,71 @@ export async function getPlacesForBrand(brandId: string): Promise<
     .from(places)
     .where(eq(places.brandId, brandId))
     .orderBy(asc(places.name));
+}
+
+/**
+ * Busca places candidatos pa asignar a una brand. Excluye los que ya
+ * pertenecen a la misma brand (los huérfanos + los de otra brand son
+ * candidatos válidos — admin puede reasignar). Filter por nombre.
+ *
+ * Solo places approved aparecen — no tiene sentido asignar pending a
+ * cadena antes de moderar.
+ */
+export async function searchPlacesForBrand(input: {
+  brandId: string;
+  query?: string;
+  limit?: number;
+}): Promise<
+  Array<{
+    id: string;
+    name: string;
+    comunaLabel: string;
+    region: string;
+    currentBrandId: string | null;
+  }>
+> {
+  if (!isDbConfigured()) return [];
+  const db = getDb();
+  const q = input.query?.trim();
+  const limit = input.limit ?? 50;
+
+  const conditions = [
+    eq(places.moderationStatus, "approved"),
+    or(isNull(places.brandId), ne(places.brandId, input.brandId)),
+  ];
+  if (q && q.length >= 2) {
+    conditions.push(ilike(places.name, `%${q}%`));
+  }
+
+  return db
+    .select({
+      id: places.id,
+      name: places.name,
+      comunaLabel: places.comunaLabel,
+      region: places.region,
+      currentBrandId: places.brandId,
+    })
+    .from(places)
+    .where(and(...conditions))
+    .orderBy(asc(places.name))
+    .limit(limit);
+}
+
+/**
+ * Asigna varios places a una brand en una sola query. Idempotente.
+ */
+export async function bulkSetBrandForPlaces(
+  placeIds: string[],
+  brandId: string | null,
+): Promise<number> {
+  if (!isDbConfigured() || placeIds.length === 0) return 0;
+  const db = getDb();
+  const result = await db
+    .update(places)
+    .set({ brandId, updatedAt: new Date() })
+    .where(inArray(places.id, placeIds))
+    .returning({ id: places.id });
+  return result.length;
 }
 
 /**

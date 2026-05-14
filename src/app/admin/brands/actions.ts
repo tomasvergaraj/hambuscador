@@ -6,8 +6,10 @@ import { z } from "zod";
 
 import { auth } from "@/server/auth";
 import {
+  bulkSetBrandForPlaces,
   createBrand,
   deleteBrand,
+  setBrandForPlace,
   updateBrand,
 } from "@/server/services/brands";
 
@@ -105,4 +107,47 @@ export async function deleteBrandAction(brandId: string) {
   revalidateTag("places");
   revalidatePath("/admin/brands");
   redirect("/admin/brands");
+}
+
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Asigna varios places a la cadena. FormData lleva `placeIds` (multi).
+ * Reasigna desde otras brands sin avisar — el admin controla.
+ */
+export async function bulkAssignPlacesAction(
+  brandId: string,
+  formData: FormData,
+) {
+  await requireAdmin();
+  if (!uuidRe.test(brandId)) throw new Error("brandId inválido");
+
+  const raw = formData.getAll("placeIds");
+  const placeIds = raw
+    .filter((v): v is string => typeof v === "string")
+    .filter((v) => uuidRe.test(v));
+  if (placeIds.length === 0) {
+    // Submit vacío → no-op silent.
+    return;
+  }
+
+  await bulkSetBrandForPlaces(placeIds, brandId);
+
+  revalidateTag("places");
+  revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
+}
+
+export async function removePlaceFromBrandAction(
+  brandId: string,
+  formData: FormData,
+) {
+  await requireAdmin();
+  const placeId = formData.get("placeId");
+  if (typeof placeId !== "string" || !uuidRe.test(placeId)) {
+    throw new Error("placeId inválido");
+  }
+  await setBrandForPlace(placeId, null);
+  revalidateTag("places");
+  revalidatePath(`/admin/brands/${brandId}`);
 }
