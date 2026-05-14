@@ -59,7 +59,10 @@ export function EditPlaceForm({
   const [phone, setPhone] = useState(place.phone ?? "");
   const [whatsapp, setWhatsapp] = useState(place.whatsapp ?? "");
   const [instagram, setInstagram] = useState(place.instagram ?? "");
+  const [facebook, setFacebook] = useState(place.facebook ?? "");
+  const [tiktok, setTiktok] = useState(place.tiktok ?? "");
   const [website, setWebsite] = useState(place.website ?? "");
+  const [menuUrl, setMenuUrl] = useState(place.menuUrl ?? "");
   const [photos, setPhotos] = useState<string[]>(place.photos);
   const [logo, setLogo] = useState<string[]>(place.logo ? [place.logo] : []);
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
@@ -298,6 +301,36 @@ export function EditPlaceForm({
               value={instagram}
               onChange={(e) => setInstagram(e.target.value)}
               placeholder="usuario sin @"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="facebook">
+            <input
+              type="text"
+              name="facebook"
+              value={facebook}
+              onChange={(e) => setFacebook(e.target.value)}
+              placeholder="page o URL completa"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="tiktok">
+            <input
+              type="text"
+              name="tiktok"
+              value={tiktok}
+              onChange={(e) => setTiktok(e.target.value)}
+              placeholder="usuario sin @"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="menú digital">
+            <input
+              type="url"
+              name="menuUrl"
+              value={menuUrl}
+              onChange={(e) => setMenuUrl(e.target.value)}
+              placeholder="https://menu.ejemplo.cl"
               className={inputCls}
             />
           </Field>

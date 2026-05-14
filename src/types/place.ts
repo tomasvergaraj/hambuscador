@@ -36,7 +36,11 @@ export type Place = {
   phone?: string;
   whatsapp?: string;
   instagram?: string;
+  facebook?: string;
+  tiktok?: string;
   website?: string;
+  /** URL al menú digital (PDF / Sirvuela / etc). Botón "menú" en ficha. */
+  menuUrl?: string;
   isVerified: boolean;
   /** Local destacado por publicidad — pin diferenciado en mapa. Solo admin lo togglea. */
   isFeatured: boolean;

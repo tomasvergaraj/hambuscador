@@ -167,7 +167,11 @@ export const places = pgTable(
     phone: text("phone"),
     whatsapp: text("whatsapp"),
     instagram: text("instagram"),
+    facebook: text("facebook"),
+    tiktok: text("tiktok"),
     website: text("website"),
+    /** URL al menú digital (PDF / Sirvuela / link compartido). Botón propio en ficha. */
+    menuUrl: text("menu_url"),
     /**
      * Logo de marca (URL pública en R2). Cuando está presente, reemplaza
      * el thumbnail de la PlaceCard compact (78×78) — un logo en formato

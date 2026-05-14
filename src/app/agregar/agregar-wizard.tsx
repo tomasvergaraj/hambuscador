@@ -62,7 +62,10 @@ export function AgregarWizard({
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [facebook, setFacebook] = useState("");
+  const [tiktok, setTiktok] = useState("");
   const [website, setWebsite] = useState("");
+  const [menuUrl, setMenuUrl] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   // Files que vienen del PWA share target via IDB. Se setean una sola vez al
   // montar; PhotoUploader los consume y los sube al R2 automático.
@@ -152,7 +155,10 @@ export function AgregarWizard({
       <input type="hidden" name="phone" value={phone} />
       <input type="hidden" name="whatsapp" value={whatsapp} />
       <input type="hidden" name="instagram" value={instagram} />
+      <input type="hidden" name="facebook" value={facebook} />
+      <input type="hidden" name="tiktok" value={tiktok} />
       <input type="hidden" name="website" value={website} />
+      <input type="hidden" name="menuUrl" value={menuUrl} />
       {photos.map((url) => (
         <input key={url} type="hidden" name="photos" value={url} />
       ))}
@@ -345,6 +351,36 @@ export function AgregarWizard({
                 value={instagram}
                 onChange={(e) => setInstagram(e.target.value)}
                 placeholder="ej. streatburger (sin @)"
+                className={INPUT_CLS}
+              />
+            </Field>
+
+            <Field label="facebook (opcional)">
+              <input
+                type="text"
+                value={facebook}
+                onChange={(e) => setFacebook(e.target.value)}
+                placeholder="ej. streatburgercl o URL completa"
+                className={INPUT_CLS}
+              />
+            </Field>
+
+            <Field label="tiktok (opcional)">
+              <input
+                type="text"
+                value={tiktok}
+                onChange={(e) => setTiktok(e.target.value)}
+                placeholder="ej. streatburger (sin @)"
+                className={INPUT_CLS}
+              />
+            </Field>
+
+            <Field label="menú digital (opcional)">
+              <input
+                type="url"
+                value={menuUrl}
+                onChange={(e) => setMenuUrl(e.target.value)}
+                placeholder="ej. https://menu.streatburger.cl"
                 className={INPUT_CLS}
               />
             </Field>

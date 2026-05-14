@@ -46,7 +46,10 @@ function dbPlaceToUi(row: DbPlace, distanceM?: number): Place {
     phone: row.phone ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
     instagram: row.instagram ?? undefined,
+    facebook: row.facebook ?? undefined,
+    tiktok: row.tiktok ?? undefined,
     website: row.website ?? undefined,
+    menuUrl: row.menuUrl ?? undefined,
     isVerified: row.isVerified,
     isFeatured: row.isFeatured,
     isClaimed: !!row.claimedBy,
@@ -498,7 +501,10 @@ export async function updatePlace(
     phone?: string | null;
     whatsapp?: string | null;
     instagram?: string | null;
+    facebook?: string | null;
+    tiktok?: string | null;
     website?: string | null;
+    menuUrl?: string | null;
     logo?: string | null;
     photos?: string[];
     isVerified?: boolean;
@@ -531,7 +537,10 @@ export async function updatePlace(
   if (patch.phone !== undefined) updates.phone = patch.phone;
   if (patch.whatsapp !== undefined) updates.whatsapp = patch.whatsapp;
   if (patch.instagram !== undefined) updates.instagram = patch.instagram;
+  if (patch.facebook !== undefined) updates.facebook = patch.facebook;
+  if (patch.tiktok !== undefined) updates.tiktok = patch.tiktok;
   if (patch.website !== undefined) updates.website = patch.website;
+  if (patch.menuUrl !== undefined) updates.menuUrl = patch.menuUrl;
   if (patch.logo !== undefined) updates.logo = patch.logo;
   if (patch.photos !== undefined) updates.photos = patch.photos;
   if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
@@ -588,7 +597,10 @@ export async function createPlace(input: {
   phone?: string;
   whatsapp?: string;
   instagram?: string;
+  facebook?: string;
+  tiktok?: string;
   website?: string;
+  menuUrl?: string;
   photos?: string[];
   submittedBy: string;
 }): Promise<DbPlace> {
@@ -617,7 +629,10 @@ export async function createPlace(input: {
     phone: input.phone ?? null,
     whatsapp: input.whatsapp ?? null,
     instagram: input.instagram ?? null,
+    facebook: input.facebook ?? null,
+    tiktok: input.tiktok ?? null,
     website: input.website ?? null,
+    menuUrl: input.menuUrl ?? null,
     photos: input.photos ?? [],
     submittedBy: input.submittedBy,
     moderationStatus: "pending",

@@ -42,6 +42,15 @@ const ownerSchema = z.object({
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   whatsapp: z.string().trim().max(40).optional().or(z.literal("")),
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
+  facebook: z.string().trim().max(120).optional().or(z.literal("")),
+  tiktok: z.string().trim().max(60).optional().or(z.literal("")),
+  menuUrl: z
+    .string()
+    .trim()
+    .max(200)
+    .url("URL del menú inválida")
+    .optional()
+    .or(z.literal("")),
   website: z
     .string()
     .trim()
@@ -90,6 +99,9 @@ export async function ownerUpdatePlaceAction(
     phone: formData.get("phone"),
     whatsapp: formData.get("whatsapp"),
     instagram: formData.get("instagram"),
+    facebook: formData.get("facebook"),
+    tiktok: formData.get("tiktok"),
+    menuUrl: formData.get("menuUrl"),
     website: formData.get("website"),
     logo: formData.get("logo"),
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
@@ -113,6 +125,9 @@ export async function ownerUpdatePlaceAction(
     phone: parsed.data.phone || null,
     whatsapp: parsed.data.whatsapp || null,
     instagram: parsed.data.instagram || null,
+    facebook: parsed.data.facebook || null,
+    tiktok: parsed.data.tiktok || null,
+    menuUrl: parsed.data.menuUrl || null,
     website: parsed.data.website || null,
     logo: parsed.data.logo || null,
     photos: parsed.data.photos,

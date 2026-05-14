@@ -1,6 +1,8 @@
 import {
   IconArrowLeft,
+  IconBrandFacebook,
   IconBrandInstagram,
+  IconBrandTiktok,
   IconBrandWhatsapp,
   IconCamera,
   IconCash,
@@ -8,6 +10,7 @@ import {
   IconFlame,
   IconPercentage,
   IconMapPin,
+  IconMenu2,
   IconPencil,
   IconPhone,
   IconRosetteDiscountCheckFilled,
@@ -290,24 +293,14 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
           </section>
         )}
 
-        {/* Action buttons — links accionables. Mobile abre app nativa cuando existe.
+        {/* Action buttons — links accionables. Orden por importancia:
+            1. Acciones directas (whatsapp/llamar) → más alto CTR conversación
+            2. Menú → clave decisión de compra
+            3. Mapa → cómo llegar
+            4. Redes sociales (IG/FB/TikTok) → engagement
+            5. Sitio web → fallback
             data-track-channel: capturado por <PlaceTracker> pa analytics. */}
         <div className="flex flex-wrap gap-2 mt-5">
-          <ActionLink
-            href={`https://www.google.com/maps/search/?api=1&query=${place.coords.lat},${place.coords.lng}`}
-            target="_blank"
-            icon={IconMapPin}
-            label="mapa"
-            trackChannel="maps"
-          />
-          {place.phone && (
-            <ActionLink
-              href={`tel:${digitsOnly(place.phone)}`}
-              icon={IconPhone}
-              label="llamar"
-              trackChannel="phone"
-            />
-          )}
           {place.whatsapp && (
             <ActionLink
               href={
@@ -321,6 +314,30 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               trackChannel="whatsapp"
             />
           )}
+          {place.phone && (
+            <ActionLink
+              href={`tel:${digitsOnly(place.phone)}`}
+              icon={IconPhone}
+              label="llamar"
+              trackChannel="phone"
+            />
+          )}
+          {place.menuUrl && (
+            <ActionLink
+              href={ensureUrlScheme(place.menuUrl)}
+              target="_blank"
+              icon={IconMenu2}
+              label="menú"
+              trackChannel="website"
+            />
+          )}
+          <ActionLink
+            href={`https://www.google.com/maps/search/?api=1&query=${place.coords.lat},${place.coords.lng}`}
+            target="_blank"
+            icon={IconMapPin}
+            label="mapa"
+            trackChannel="maps"
+          />
           {place.instagram && (
             <ActionLink
               href={`https://instagram.com/${cleanIgHandle(place.instagram)}`}
@@ -328,6 +345,24 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               icon={IconBrandInstagram}
               label="instagram"
               trackChannel="instagram"
+            />
+          )}
+          {place.facebook && (
+            <ActionLink
+              href={facebookUrl(place.facebook)}
+              target="_blank"
+              icon={IconBrandFacebook}
+              label="facebook"
+              trackChannel="website"
+            />
+          )}
+          {place.tiktok && (
+            <ActionLink
+              href={tiktokUrl(place.tiktok)}
+              target="_blank"
+              icon={IconBrandTiktok}
+              label="tiktok"
+              trackChannel="website"
             />
           )}
           {place.website && (
@@ -794,6 +829,8 @@ function buildRestaurantJsonLd(place: {
   phone?: string;
   whatsapp?: string;
   instagram?: string;
+  facebook?: string;
+  tiktok?: string;
   website?: string;
 }): RestaurantJsonLd {
   const url = `${SITE_URL}/${place.comuna}/${place.slug}`;
@@ -824,6 +861,8 @@ function buildRestaurantJsonLd(place: {
   if (place.phone) ld.telephone = place.phone;
   const sameAs: string[] = [];
   if (place.instagram) sameAs.push(`https://instagram.com/${cleanIgHandle(place.instagram)}`);
+  if (place.facebook) sameAs.push(facebookUrl(place.facebook));
+  if (place.tiktok) sameAs.push(tiktokUrl(place.tiktok));
   if (place.website) sameAs.push(ensureUrlScheme(place.website));
   if (sameAs.length > 0) ld.sameAs = sameAs;
 
@@ -880,6 +919,21 @@ function ensureUrlScheme(s: string): string {
   const trimmed = s.trim();
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed}`;
+}
+
+/** Acepta page URL completa o slug/handle. Devuelve URL canonical. */
+function facebookUrl(s: string): string {
+  const trimmed = s.trim().replace(/^@/, "");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://facebook.com/${trimmed.replace(/^\/+/, "")}`;
+}
+
+/** Acepta URL completa o handle (con o sin @). */
+function tiktokUrl(s: string): string {
+  const trimmed = s.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const handle = trimmed.replace(/^@/, "");
+  return `https://tiktok.com/@${handle}`;
 }
 
 function daysSince(iso: string): string {
