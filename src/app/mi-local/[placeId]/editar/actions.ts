@@ -12,6 +12,7 @@ import {
   getPlaceByIdForAdmin,
   updatePlace,
 } from "@/server/services/places";
+import { hasActivePremium } from "@/server/services/subscriptions";
 
 const cuisineIds = CUISINE_TYPES.map((c) => c.id) as [string, ...string[]];
 const priceIds = PRICE_RANGES.map((p) => p.id) as [string, ...string[]];
@@ -49,7 +50,9 @@ const ownerSchema = z.object({
     .optional()
     .or(z.literal("")),
   logo: z.string().trim().url().optional().or(z.literal("")),
-  photos: z.array(z.string().url()).max(6).default([]),
+  // Cap superior defensivo (premium permite 15). El check de tier se
+  // hace en runtime contra la sub activa — acá un cap duro evita abusos.
+  photos: z.array(z.string().url()).max(15).default([]),
 });
 
 export type OwnerEditState = { error?: string; ok?: boolean };
@@ -93,6 +96,11 @@ export async function ownerUpdatePlaceAction(
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  // Cap dinámico de fotos por tier: free=6, premium=15.
+  if (parsed.data.photos.length > 6 && !(await hasActivePremium(placeId))) {
+    return { error: "Subir más de 6 fotos requiere tier premium." };
   }
 
   await updatePlace(placeId, {

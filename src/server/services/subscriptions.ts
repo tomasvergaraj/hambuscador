@@ -71,12 +71,12 @@ export async function createSubscription(input: {
       .returning();
     if (!row) throw new Error("createSubscription: insert returned no row");
 
-    if (tier === "featured") {
-      await tx
-        .update(places)
-        .set({ isFeatured: true, updatedAt: new Date() })
-        .where(eq(places.id, input.placeId));
-    }
+    // Premium incluye el boost de featured (es un superset). Cualquiera de
+    // los dos tiers active prende la flag.
+    await tx
+      .update(places)
+      .set({ isFeatured: true, updatedAt: new Date() })
+      .where(eq(places.id, input.placeId));
     return row;
   });
 
@@ -154,17 +154,15 @@ export async function expireDueSubscriptions(): Promise<{ expired: number }> {
 }
 
 /**
- * Setea `places.is_featured = false` SOLO si ya no quedan subs active del
- * mismo tier para ese place. Defensivo: hoy con UNIQUE partial nunca hay >1,
- * pero si en el futuro agregamos más tiers que apuntan a la misma flag,
- * esto previene flapping.
+ * Setea `places.is_featured = false` SOLO si ya no quedan subs active de
+ * NINGÚN tier para ese place. Ambos featured y premium prenden la flag,
+ * así que la flag se mantiene mientras quede al menos una sub viva.
  */
 async function maybeUnsetFeaturedFlag(
   tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
   placeId: string,
-  tier: SubscriptionTier,
+  _tier: SubscriptionTier,
 ): Promise<void> {
-  if (tier !== "featured") return;
   const [stillActive] = await tx
     .select({ id: subscriptions.id })
     .from(subscriptions)
@@ -172,7 +170,6 @@ async function maybeUnsetFeaturedFlag(
       and(
         eq(subscriptions.placeId, placeId),
         eq(subscriptions.status, "active"),
-        eq(subscriptions.tier, "featured"),
       ),
     )
     .limit(1);
@@ -243,3 +240,29 @@ export async function countActiveSubscriptions(): Promise<number> {
     .where(eq(subscriptions.status, "active"));
   return row?.count ?? 0;
 }
+
+/**
+ * True si el local tiene una sub `active` del tier solicitado (y vigente
+ * por período). Usado como gate de features premium: stats, replies, +fotos.
+ */
+export async function hasActiveTier(
+  placeId: string,
+  tier: SubscriptionTier,
+): Promise<boolean> {
+  if (!isDbConfigured()) return false;
+  const db = getDb();
+  const [row] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.placeId, placeId),
+        eq(subscriptions.tier, tier),
+        eq(subscriptions.status, "active"),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+export const hasActivePremium = (placeId: string) => hasActiveTier(placeId, "premium");

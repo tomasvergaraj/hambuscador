@@ -38,6 +38,29 @@ export default function NuevaPromocionPage() {
           <PlacePicker />
         </div>
 
+        <div>
+          <label
+            htmlFor="tier"
+            className="text-xs font-medium text-carbon mb-1 block"
+          >
+            tier
+          </label>
+          <select
+            id="tier"
+            name="tier"
+            defaultValue="featured"
+            required
+            className="w-full bg-white border border-crema-edge rounded-md px-3 py-2 text-sm text-carbon focus:outline-none focus:border-mostaza"
+          >
+            <option value="featured">
+              featured — boost en sorts + pin tomate + badge
+            </option>
+            <option value="premium">
+              premium — featured + stats owner + responder + +fotos (15)
+            </option>
+          </select>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label

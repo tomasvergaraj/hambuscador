@@ -20,18 +20,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
 
+import { OwnerReplyForm } from "@/components/place/owner-reply";
 import { PhotoCarousel } from "@/components/place/photo-carousel";
+import { PlaceTracker } from "@/components/place/place-tracker";
+import { ReplyCard } from "@/components/place/reply-card";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { RatingPill } from "@/components/ui/rating-pill";
 import { StatusPill } from "@/components/ui/status-pill";
-import { getPlaceBySlug, getReviewsByPlaceId } from "@/lib/data";
+import {
+  getPlaceBySlug,
+  getRepliesForReviewIds,
+  getReviewsByPlaceId,
+} from "@/lib/data";
 import { DAY_FULL_LABEL, DAY_KEYS, PRICE_RANGES, type DayKey } from "@/lib/constants";
 import { ShareButton } from "@/components/place/share-button";
 import { auth } from "@/server/auth";
 import { hasPendingClaim, isOwnerOf } from "@/server/services/claims";
 import { isFavorite } from "@/server/services/favorites";
 import { getMyReviewWithAuthor } from "@/server/services/reviews";
+import { hasActivePremium } from "@/server/services/subscriptions";
 
 import { deleteMyReview } from "./calificar/actions";
 import { toggleFavoriteAction } from "./favorite-action";
@@ -87,7 +95,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
   // Mine va aparte (con JOIN a users) y `others` excluye su id, así no
   // overfetcheamos. Antes pedíamos 20 reseñas para mostrar 2 + buscar la
   // propia en el array — ahora son ~7 queries en paralelo, todas baratas.
-  const [mine, others, favorited, isOwner, claimPending] = await Promise.all([
+  const [mine, others, favorited, isOwner, claimPending, isPremium] = await Promise.all([
     userId ? getMyReviewWithAuthor(place.id, userId) : Promise.resolve(null),
     getReviewsByPlaceId(
       place.id,
@@ -96,8 +104,19 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
     userId ? isFavorite(userId, place.id) : Promise.resolve(false),
     userId ? isOwnerOf(userId, place.id) : Promise.resolve(false),
     userId ? hasPendingClaim(place.id, userId) : Promise.resolve(false),
+    hasActivePremium(place.id),
   ]);
   const canEdit = isAdmin || isOwner;
+  const canReplyAsOwner = isOwner && isPremium;
+
+  // Replies del owner (siempre visibles a todos; el form solo si owner+premium).
+  const visibleReviewIds = [
+    ...(mine ? [mine.id] : []),
+    ...others.slice(0, 2).map((r) => r.id),
+  ];
+  const repliesMap = visibleReviewIds.length > 0
+    ? await getRepliesForReviewIds(visibleReviewIds)
+    : new Map();
 
   // JSON-LD Restaurant — Google usa esto para rich results (rating, dirección,
   // horario, fotos en SERP). Ver https://schema.org/Restaurant
@@ -248,19 +267,22 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
           )}
         </ul>
 
-        {/* Action buttons — links accionables. Mobile abre app nativa cuando existe. */}
+        {/* Action buttons — links accionables. Mobile abre app nativa cuando existe.
+            data-track-channel: capturado por <PlaceTracker> pa analytics. */}
         <div className="flex flex-wrap gap-2 mt-5">
           <ActionLink
             href={`https://www.google.com/maps/search/?api=1&query=${place.coords.lat},${place.coords.lng}`}
             target="_blank"
             icon={IconMapPin}
             label="mapa"
+            trackChannel="maps"
           />
           {place.phone && (
             <ActionLink
               href={`tel:${digitsOnly(place.phone)}`}
               icon={IconPhone}
               label="llamar"
+              trackChannel="phone"
             />
           )}
           {place.whatsapp && (
@@ -273,6 +295,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               target="_blank"
               icon={IconBrandWhatsapp}
               label="whatsapp"
+              trackChannel="whatsapp"
             />
           )}
           {place.instagram && (
@@ -281,6 +304,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               target="_blank"
               icon={IconBrandInstagram}
               label="instagram"
+              trackChannel="instagram"
             />
           )}
           {place.website && (
@@ -289,9 +313,12 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
               target="_blank"
               icon={IconWorld}
               label="sitio web"
+              trackChannel="website"
             />
           )}
         </div>
+
+        <PlaceTracker placeId={place.id} />
 
         {/* CTA reclamar — visible si el local no está claimed y el viewer
             no es ni admin ni el owner. Si tiene claim pending, mostramos
@@ -407,6 +434,16 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                   </span>
                 </div>
               )}
+              {repliesMap.get(mine.id) && (
+                <ReplyCard text={repliesMap.get(mine.id)!.text} />
+              )}
+              {canReplyAsOwner && (
+                <OwnerReplyForm
+                  reviewId={mine.id}
+                  placeId={place.id}
+                  initialText={repliesMap.get(mine.id)?.text ?? null}
+                />
+              )}
             </article>
           </section>
         )}
@@ -488,6 +525,16 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
                       </span>
                     </div>
                   )}
+                  {repliesMap.get(review.id) && (
+                    <ReplyCard text={repliesMap.get(review.id)!.text} />
+                  )}
+                  {canReplyAsOwner && (
+                    <OwnerReplyForm
+                      reviewId={review.id}
+                      placeId={place.id}
+                      initialText={repliesMap.get(review.id)?.text ?? null}
+                    />
+                  )}
                 </article>
               ))}
             </div>
@@ -516,14 +563,16 @@ type ActionLinkProps = {
   icon: ComponentType<SVGProps<SVGSVGElement> & { size?: number; stroke?: number }>;
   label: string;
   target?: "_blank";
+  trackChannel?: "whatsapp" | "instagram" | "website" | "maps" | "phone";
 };
 
-function ActionLink({ href, icon: Icon, label, target }: ActionLinkProps) {
+function ActionLink({ href, icon: Icon, label, target, trackChannel }: ActionLinkProps) {
   return (
     <a
       href={href}
       target={target}
       rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      data-track-channel={trackChannel}
       className="flex-1 min-w-[40%] inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-crema-deep border border-crema-edge text-carbon font-medium text-xs hover:bg-crema-edge transition-[transform,colors] duration-150 active:scale-[0.97]"
     >
       <Icon size={14} aria-hidden="true" />

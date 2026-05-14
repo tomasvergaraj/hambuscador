@@ -591,7 +591,14 @@ export const picasLists = pgTable(
  *
  * Migration: `drizzle/2026-05-14-subscriptions.sql`.
  */
-export const subscriptionTierEnum = ["featured"] as const;
+/**
+ * Tiers de publicidad:
+ * - `featured`: boost en sorts + pin tomate en mapa + badge "destacado".
+ * - `premium`: incluye featured + stats de owner (views/clicks) + responder
+ *    reseñas + límite fotos extendido (15 vs 6). Otorgado por suscripción
+ *    aparte: un local PUEDE tener active simultáneamente una de cada tier.
+ */
+export const subscriptionTierEnum = ["featured", "premium"] as const;
 export type SubscriptionTier = (typeof subscriptionTierEnum)[number];
 
 export const subscriptionStatusEnum = ["active", "expired", "canceled"] as const;
@@ -655,6 +662,90 @@ export const subscriptions = pgTable(
   }),
 );
 
+/**
+ * Eventos analíticos por local. Una fila por evento (view de ficha o click
+ * en botón de contacto). Volumen acotado: ~5-20 events por ficha visitada.
+ * Solo owners con tier `premium` los consumen (aggregates en
+ * `/mi-local/[id]/stats`); admin los ve full.
+ *
+ * Dedup: `visitor_id` cookie de 30d permite contar DISTINCT visitantes.
+ * Total = `count(*)`. Cleanup retention manual con DELETE WHERE created_at
+ * < NOW() - INTERVAL '90 days' (piggyback en cron weekly como web_vitals).
+ *
+ * Migration: `drizzle/2026-05-14-premium-tier.sql`.
+ */
+export const placeEventTypeEnum = ["view", "contact_click"] as const;
+export type PlaceEventType = (typeof placeEventTypeEnum)[number];
+
+export const placeEventChannelEnum = [
+  "whatsapp",
+  "instagram",
+  "website",
+  "maps",
+  "phone",
+] as const;
+export type PlaceEventChannel = (typeof placeEventChannelEnum)[number];
+
+export const placeEvents = pgTable(
+  "place_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    eventType: text("event_type", { enum: placeEventTypeEnum }).notNull(),
+    /** Solo seteado para `contact_click`. NULL para `view`. */
+    channel: text("channel", { enum: placeEventChannelEnum }),
+    /** Hash de cookie `hb_v` (30d) — dedup por visitante. NULL si no opt-in. */
+    visitorId: text("visitor_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    placeCreatedIdx: index("place_events_place_created_idx").on(
+      table.placeId,
+      sql`${table.createdAt} DESC`,
+    ),
+    createdAtIdx: index("place_events_created_at_idx").on(
+      sql`${table.createdAt} DESC`,
+    ),
+  }),
+);
+
+/**
+ * Respuestas del owner a reseñas. Una respuesta por (review_id) — clave única.
+ * Solo el owner verificado del local (con tier `premium` activo) puede crear
+ * la reply. Borrar la reseña casca la reply.
+ *
+ * Migration: `drizzle/2026-05-14-premium-tier.sql`.
+ */
+export const reviewReplies = pgTable(
+  "review_replies",
+  {
+    /** PK = review_id: máximo una reply por review. */
+    reviewId: uuid("review_id")
+      .primaryKey()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    placeIdx: index("review_replies_place_idx").on(table.placeId),
+  }),
+);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -695,6 +786,10 @@ export type DbFollow = typeof follows.$inferSelect;
 export type DbPushSubscription = typeof pushSubscriptions.$inferSelect;
 export type DbSubscription = typeof subscriptions.$inferSelect;
 export type NewDbSubscription = typeof subscriptions.$inferInsert;
+export type DbPlaceEvent = typeof placeEvents.$inferSelect;
+export type NewDbPlaceEvent = typeof placeEvents.$inferInsert;
+export type DbReviewReply = typeof reviewReplies.$inferSelect;
+export type NewDbReviewReply = typeof reviewReplies.$inferInsert;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

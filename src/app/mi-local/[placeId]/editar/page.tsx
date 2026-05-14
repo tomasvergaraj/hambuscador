@@ -1,4 +1,4 @@
-import { IconExternalLink } from "@tabler/icons-react";
+import { IconChartBar, IconExternalLink } from "@tabler/icons-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -6,6 +6,7 @@ import { Header } from "@/components/nav/header";
 import { auth } from "@/server/auth";
 import { isOwnerOf } from "@/server/services/claims";
 import { getPlaceByIdForAdmin } from "@/server/services/places";
+import { hasActivePremium } from "@/server/services/subscriptions";
 
 import { OwnerEditForm } from "./owner-edit-form";
 
@@ -44,6 +45,7 @@ export default async function MiLocalEditarPage({
 
   const place = await getPlaceByIdForAdmin(placeId);
   if (!place) notFound();
+  const isPremium = await hasActivePremium(placeId);
 
   return (
     <div className="flex flex-col min-h-screen pb-12">
@@ -62,15 +64,24 @@ export default async function MiLocalEditarPage({
               {place.comunaLabel} · {place.region}
             </p>
           </div>
-          <Link
-            href={`/${place.comuna}/${place.slug}`}
-            target="_blank"
-            rel="noopener"
-            className="inline-flex items-center gap-1 text-xs text-carbon bg-crema-deep border border-crema-edge hover:bg-white px-3 py-1.5 rounded-full transition-colors"
-          >
-            <IconExternalLink size={14} />
-            ver ficha
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href={`/mi-local/${place.id}/stats`}
+              className="inline-flex items-center gap-1 text-xs text-carbon bg-crema-deep border border-crema-edge hover:bg-white px-3 py-1.5 rounded-full transition-colors"
+            >
+              <IconChartBar size={14} />
+              stats
+            </Link>
+            <Link
+              href={`/${place.comuna}/${place.slug}`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 text-xs text-carbon bg-crema-deep border border-crema-edge hover:bg-white px-3 py-1.5 rounded-full transition-colors"
+            >
+              <IconExternalLink size={14} />
+              ver ficha
+            </Link>
+          </div>
         </div>
 
         <p className="text-[11px] text-bronceado mb-4 leading-relaxed">
@@ -78,7 +89,7 @@ export default async function MiLocalEditarPage({
           cambiar el nombre, comuna o ubicación del local, contacta al equipo.
         </p>
 
-        <OwnerEditForm place={place} />
+        <OwnerEditForm place={place} isPremium={isPremium} />
       </main>
     </div>
   );

@@ -12,6 +12,7 @@ import {
 
 const createSchema = z.object({
   placeId: z.string().uuid("placeId inválido"),
+  tier: z.enum(["featured", "premium"]).default("featured"),
   amountClp: z.coerce.number().int().nonnegative().max(10_000_000),
   periodDays: z.coerce.number().int().min(1).max(365),
   notes: z.string().trim().max(500).optional().nullable(),
@@ -31,6 +32,7 @@ export async function createSubscriptionAction(formData: FormData) {
 
   const parsed = createSchema.safeParse({
     placeId: formData.get("placeId"),
+    tier: formData.get("tier") || "featured",
     amountClp: formData.get("amountClp"),
     periodDays: formData.get("periodDays"),
     notes: formData.get("notes") || null,
@@ -44,7 +46,7 @@ export async function createSubscriptionAction(formData: FormData) {
 
   await createSubscription({
     placeId: parsed.data.placeId,
-    tier: "featured",
+    tier: parsed.data.tier,
     amountClp: parsed.data.amountClp,
     periodDays: parsed.data.periodDays,
     provider: "manual",

@@ -38,6 +38,7 @@ import {
   getReviewById as getReviewByIdSvc,
   getReviewsByPlaceId as getReviewsByPlaceIdSvc,
 } from "@/server/services/reviews";
+import { getRepliesForReviewIds as getRepliesForReviewIdsSvc } from "@/server/services/review-replies";
 import {
   MOCK_PLACES,
   MOCK_REVIEWS,
@@ -218,6 +219,18 @@ export const getReviewsByPlaceId = cache(
   ["reviews-by-place"],
   { revalidate: 30, tags: ["reviews"] },
 );
+
+/**
+ * Replies del owner pa un set de review ids. Cache compartido por reseñas
+ * del local — el detail page hace 1 sola query.
+ *
+ * No cacheamos por reviewIds[] como key (cardinal alto rompe el cache);
+ * dejamos sin cache para que el detail page la pida fresh siempre, y
+ * confiamos en que la query es barata (pk lookup + index).
+ */
+export async function getRepliesForReviewIds(reviewIds: string[]) {
+  return getRepliesForReviewIdsSvc(reviewIds);
+}
 
 /**
  * Reseña pública por id (con autor y local), para `/r/[id]` y su OG.

@@ -1,6 +1,7 @@
 import {
   IconBell,
   IconBuildingStore,
+  IconChartBar,
   IconChevronRight,
   IconHeart,
   IconLayoutDashboard,
@@ -198,10 +199,10 @@ export default async function PerfilPage({
             </h2>
             <ul className="flex flex-col gap-2">
               {ownedPlaces.map((p) => (
-                <li key={p.id}>
+                <li key={p.id} className="flex gap-2">
                   <Link
                     href={`/mi-local/${p.id}/editar`}
-                    className="flex items-center gap-3 bg-mostaza/10 border border-mostaza/30 rounded-lg p-3 hover:bg-mostaza/15 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98]"
+                    className="flex-1 flex items-center gap-3 bg-mostaza/10 border border-mostaza/30 rounded-lg p-3 hover:bg-mostaza/15 transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98]"
                   >
                     <div className="w-9 h-9 rounded-md bg-mostaza text-carbon flex items-center justify-center shrink-0">
                       <IconRosetteDiscountCheckFilled size={18} aria-hidden="true" />
@@ -219,6 +220,13 @@ export default async function PerfilPage({
                       className="text-mostaza-deep shrink-0"
                       aria-hidden="true"
                     />
+                  </Link>
+                  <Link
+                    href={`/mi-local/${p.id}/stats`}
+                    aria-label="stats"
+                    className="inline-flex items-center justify-center w-12 bg-mostaza/10 border border-mostaza/30 rounded-lg text-mostaza-deep hover:bg-mostaza/15 transition-colors"
+                  >
+                    <IconChartBar size={18} aria-hidden="true" />
                   </Link>
                 </li>
               ))}

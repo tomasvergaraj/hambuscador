@@ -23,7 +23,14 @@ import { ownerUpdatePlaceAction, type OwnerEditState } from "./actions";
 type Toast = { kind: "ok" | "error"; msg: string };
 const initial: OwnerEditState = {};
 
-export function OwnerEditForm({ place }: { place: Place }) {
+export function OwnerEditForm({
+  place,
+  isPremium = false,
+}: {
+  place: Place;
+  isPremium?: boolean;
+}) {
+  const maxPhotos = isPremium ? 15 : 6;
   const boundAction = ownerUpdatePlaceAction.bind(null, place.id);
   const [state, formAction, pending] = useActionState(boundAction, initial);
 
@@ -83,8 +90,13 @@ export function OwnerEditForm({ place }: { place: Place }) {
         </p>
       </Section>
 
-      <Section title="fotos (máx 6)">
-        <PhotoUploader value={photos} onChange={setPhotos} max={6} />
+      <Section title={`fotos (máx ${maxPhotos})`}>
+        <PhotoUploader value={photos} onChange={setPhotos} max={maxPhotos} />
+        {!isPremium && (
+          <p className="text-[11px] text-bronceado mt-1">
+            con tier premium subís hasta 15 fotos.
+          </p>
+        )}
         {photos.map((url, i) => (
           <input key={i} type="hidden" name="photos" value={url} />
         ))}
