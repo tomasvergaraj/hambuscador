@@ -2,6 +2,7 @@ import { IconExternalLink } from "@tabler/icons-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { getAllBrands } from "@/server/services/brands";
 import { getPlaceByIdForAdmin } from "@/server/services/places";
 
 import { EditPlaceForm } from "./edit-form";
@@ -17,7 +18,10 @@ export default async function AdminEditPlacePage({
   params: Promise<Params>;
 }) {
   const { id } = await params;
-  const place = await getPlaceByIdForAdmin(id);
+  const [place, brands] = await Promise.all([
+    getPlaceByIdForAdmin(id),
+    getAllBrands({ includeInactive: true }),
+  ]);
   if (!place) notFound();
 
   return (
@@ -54,7 +58,7 @@ export default async function AdminEditPlacePage({
         </Link>
       </div>
 
-      <EditPlaceForm place={place} />
+      <EditPlaceForm place={place} brands={brands} />
     </main>
   );
 }

@@ -31,7 +31,15 @@ type Toast = { kind: "ok" | "error"; msg: string };
 
 const initial: UpdatePlaceState = {};
 
-export function EditPlaceForm({ place }: { place: Place }) {
+type BrandOption = { id: string; name: string; isActive: boolean };
+
+export function EditPlaceForm({
+  place,
+  brands = [],
+}: {
+  place: Place;
+  brands?: BrandOption[];
+}) {
   // Bind del placeId para que el action lo reciba como primer arg.
   const boundAction = updatePlaceAction.bind(null, place.id);
   const [state, formAction, pending] = useActionState(boundAction, initial);
@@ -57,6 +65,7 @@ export function EditPlaceForm({ place }: { place: Place }) {
   const [isVerified, setIsVerified] = useState<boolean>(place.isVerified);
   const [isFeatured, setIsFeatured] = useState<boolean>(place.isFeatured);
   const [isClaimed, setIsClaimed] = useState<boolean>(place.isClaimed);
+  const [brandId, setBrandId] = useState<string>(place.brandId ?? "");
   const [revokePending, startRevokeTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
 
@@ -355,6 +364,27 @@ export function EditPlaceForm({ place }: { place: Place }) {
         <p className="text-[11px] text-bronceado">
           el local sale con pin diferenciado en el mapa. úsalo solo para locales
           con publicidad activa.
+        </p>
+      </Section>
+
+      <Section title="cadena (brand)">
+        <select
+          name="brandId"
+          value={brandId}
+          onChange={(e) => setBrandId(e.target.value)}
+          className="w-full bg-white border border-crema-edge rounded-md px-3 py-2 text-sm text-carbon focus:outline-none focus:border-mostaza"
+        >
+          <option value="">— sin cadena (independiente) —</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+              {!b.isActive ? " (inactiva)" : ""}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-bronceado">
+          cuando la cadena tiene logo, el pin del mapa lo usa. crea cadenas
+          en <code>/admin/brands</code>.
         </p>
       </Section>
 

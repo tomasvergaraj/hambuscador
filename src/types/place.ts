@@ -42,6 +42,12 @@ export type Place = {
   isFeatured: boolean;
   isClaimed: boolean; // dueño reclamó la ficha
   ratingsByAspect?: Record<ReviewAspectId, number>;
+  /** ID de la cadena a la que pertenece (null si independiente). */
+  brandId?: string | null;
+  /** URL del logo de la cadena (enriquecido por el caller cuando se necesita render). */
+  brandLogoUrl?: string | null;
+  /** Nombre de la cadena (idem). */
+  brandName?: string | null;
 };
 
 // ============================================================================

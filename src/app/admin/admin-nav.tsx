@@ -62,6 +62,8 @@ export function AdminNav({
           : null,
     },
     { href: "/admin/places", label: "locales" },
+    { href: "/admin/brands", label: "cadenas" },
+    { href: "/admin/ofertas", label: "ofertas" },
     { href: "/admin/resenas", label: "reseñas" },
     { href: "/admin/usuarios", label: "usuarios" },
     { href: "/admin/picas", label: "picás" },

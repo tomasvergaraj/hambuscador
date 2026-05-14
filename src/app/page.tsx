@@ -6,12 +6,18 @@ import { Header } from "@/components/nav/header";
 import { BottomNav } from "@/components/nav/bottom-nav";
 import { HomeSearchInput } from "@/components/place/home-search-input";
 import { PlaceCard } from "@/components/place/place-card";
+import { PromoCard } from "@/components/place/promo-card";
 import { UseLocationButton } from "@/components/place/use-location-button";
 import { ChipDisplay } from "@/components/ui/chip-display";
-import { getPlacesNearby, getRecentlyApprovedPlaces } from "@/lib/data";
-import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
+import {
+  getActiveRegions,
+  getPlacesNearby,
+  getRecentlyApprovedPlaces,
+} from "@/lib/data";
+import { findClosestRegion, GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { initialsFromName } from "@/lib/utils";
 import { auth } from "@/server/auth";
+import { getActivePromotionsForHome } from "@/server/services/promotions";
 
 // Atajos: links a /buscar con filtros pre-aplicados. NO son toggles, son
 // entry points de discovery.
@@ -27,13 +33,22 @@ export default async function HomePage() {
   const cookieStore = await cookies();
   const coords = parseGeoCookie(cookieStore.get(GEO_COOKIE_NAME)?.value);
 
-  const [places, recent, session] = await Promise.all([
+  const [places, recent, session, regions] = await Promise.all([
     getPlacesNearby(coords ? { ...coords, radiusM: 15_000 } : undefined),
     getRecentlyApprovedPlaces(4),
     auth(),
+    getActiveRegions(),
   ]);
 
   const nearby = places.slice(0, 3);
+
+  // Promos: filtra por región del user si tenemos coords. Sin coords, top
+  // nacional (el service maneja el fallback).
+  const userRegion = coords ? findClosestRegion(coords, regions) : null;
+  const promos = await getActivePromotionsForHome({
+    regionLabel: userRegion?.label ?? null,
+    limit: 10,
+  });
   const avatarInitials = session?.user?.name ? initialsFromName(session.user.name) : undefined;
   const avatarImage = session?.user?.image ?? null;
 
@@ -69,6 +84,26 @@ export default async function HomePage() {
           </Link>
         ))}
       </section>
+
+      {promos.length > 0 && (
+        <section className="mt-5">
+          <div className="px-4 flex items-baseline justify-between mb-2">
+            <h2 className="font-display font-semibold text-base text-carbon">
+              promociones
+            </h2>
+            {userRegion && (
+              <span className="text-[11px] text-bronceado">
+                en {userRegion.label}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-4 pb-1">
+            {promos.map((promo) => (
+              <PromoCard key={promo.id} promo={promo} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="px-4 mt-5">
         <div className="flex items-baseline justify-between mb-1.5">

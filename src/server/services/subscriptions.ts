@@ -1,7 +1,8 @@
-import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { and, desc, eq, lte, or, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
 import {
+  brands,
   places,
   subscriptions,
   type DbSubscription,
@@ -20,11 +21,19 @@ import {
 // Modo demo (sin DATABASE_URL): todas las fns son no-op o retornan vacío.
 // ============================================================================
 
-export type SubscriptionWithPlace = DbSubscription & {
-  placeName: string;
-  placeSlug: string;
-  comunaSlug: string;
-  comunaLabel: string;
+export type SubscriptionWithTarget = DbSubscription & {
+  /** Cuando place_id está seteado. */
+  placeName: string | null;
+  placeSlug: string | null;
+  comunaSlug: string | null;
+  comunaLabel: string | null;
+  /** Cuando brand_id está seteado. */
+  brandName: string | null;
+  brandSlug: string | null;
+  brandLogoUrl: string | null;
+  /** Resumen pa display. */
+  targetType: "place" | "brand";
+  targetLabel: string;
 };
 
 /**
@@ -35,7 +44,9 @@ export type SubscriptionWithPlace = DbSubscription & {
  * Retorna la sub creada.
  */
 export async function createSubscription(input: {
-  placeId: string;
+  /** Exactamente uno entre placeId / brandId. */
+  placeId?: string | null;
+  brandId?: string | null;
   tier?: SubscriptionTier;
   amountClp: number;
   periodDays: number;
@@ -47,6 +58,19 @@ export async function createSubscription(input: {
   if (!isDbConfigured()) {
     throw new Error("createSubscription requiere DATABASE_URL");
   }
+  const placeId = input.placeId ?? null;
+  const brandId = input.brandId ?? null;
+  if ((placeId === null) === (brandId === null)) {
+    throw new Error(
+      "createSubscription: exactamente uno entre placeId y brandId",
+    );
+  }
+  // Tier 'promo' es por local — no soporta target brand.
+  if (brandId && input.tier === "promo") {
+    throw new Error(
+      "createSubscription: tier 'promo' no aplica a cadenas",
+    );
+  }
   const db = getDb();
 
   const tier: SubscriptionTier = input.tier ?? "featured";
@@ -57,7 +81,8 @@ export async function createSubscription(input: {
     const [row] = await tx
       .insert(subscriptions)
       .values({
-        placeId: input.placeId,
+        placeId,
+        brandId,
         tier,
         status: "active",
         amountClp: input.amountClp,
@@ -71,12 +96,20 @@ export async function createSubscription(input: {
       .returning();
     if (!row) throw new Error("createSubscription: insert returned no row");
 
-    // Premium incluye el boost de featured (es un superset). Cualquiera de
-    // los dos tiers active prende la flag.
-    await tx
-      .update(places)
-      .set({ isFeatured: true, updatedAt: new Date() })
-      .where(eq(places.id, input.placeId));
+    // Sub a place: prende solo ese place. Sub a brand: prende todos los
+    // places de la cadena. Premium es superset de featured — ambos tiers
+    // prenden la flag.
+    if (placeId) {
+      await tx
+        .update(places)
+        .set({ isFeatured: true, updatedAt: new Date() })
+        .where(eq(places.id, placeId));
+    } else if (brandId) {
+      await tx
+        .update(places)
+        .set({ isFeatured: true, updatedAt: new Date() })
+        .where(eq(places.brandId, brandId));
+    }
     return row;
   });
 
@@ -105,7 +138,11 @@ export async function cancelSubscription(subscriptionId: string): Promise<void> 
       .set({ status: "canceled", canceledAt: new Date(), updatedAt: new Date() })
       .where(eq(subscriptions.id, subscriptionId));
 
-    await maybeUnsetFeaturedFlag(tx, sub.placeId, sub.tier);
+    if (sub.placeId) {
+      await maybeUnsetFeaturedFlagForPlace(tx, sub.placeId);
+    } else if (sub.brandId) {
+      await maybeUnsetFeaturedFlagForBrand(tx, sub.brandId);
+    }
   });
 }
 
@@ -122,7 +159,12 @@ export async function expireDueSubscriptions(): Promise<{ expired: number }> {
 
   const expired = await db.transaction(async (tx) => {
     const due = await tx
-      .select({ id: subscriptions.id, placeId: subscriptions.placeId, tier: subscriptions.tier })
+      .select({
+        id: subscriptions.id,
+        placeId: subscriptions.placeId,
+        brandId: subscriptions.brandId,
+        tier: subscriptions.tier,
+      })
       .from(subscriptions)
       .where(
         and(
@@ -143,9 +185,14 @@ export async function expireDueSubscriptions(): Promise<{ expired: number }> {
         ),
       );
 
-    // Revertir flags por place afectado (en serie — el N esperado es bajo).
+    // Revertir flags por target afectado. Brand subs pueden tocar varios
+    // places — la fn brand recorre todos los hijos.
     for (const row of due) {
-      await maybeUnsetFeaturedFlag(tx, row.placeId, row.tier);
+      if (row.placeId) {
+        await maybeUnsetFeaturedFlagForPlace(tx, row.placeId);
+      } else if (row.brandId) {
+        await maybeUnsetFeaturedFlagForBrand(tx, row.brandId);
+      }
     }
     return due;
   });
@@ -154,16 +201,21 @@ export async function expireDueSubscriptions(): Promise<{ expired: number }> {
 }
 
 /**
- * Setea `places.is_featured = false` SOLO si ya no quedan subs active de
- * NINGÚN tier para ese place. Ambos featured y premium prenden la flag,
- * así que la flag se mantiene mientras quede al menos una sub viva.
+ * Setea `places.is_featured = false` SOLO si ya no quedan subs active
+ * (directas al place NI a su brand) que justifiquen el boost.
  */
-async function maybeUnsetFeaturedFlag(
+async function maybeUnsetFeaturedFlagForPlace(
   tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
   placeId: string,
-  _tier: SubscriptionTier,
 ): Promise<void> {
-  const [stillActive] = await tx
+  // ¿Place tiene brand? Si sí, ver si la brand tiene sub active.
+  const [placeRow] = await tx
+    .select({ brandId: places.brandId })
+    .from(places)
+    .where(eq(places.id, placeId))
+    .limit(1);
+
+  const directActive = tx
     .select({ id: subscriptions.id })
     .from(subscriptions)
     .where(
@@ -173,7 +225,21 @@ async function maybeUnsetFeaturedFlag(
       ),
     )
     .limit(1);
-  if (!stillActive) {
+  const brandActive = placeRow?.brandId
+    ? tx
+        .select({ id: subscriptions.id })
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.brandId, placeRow.brandId),
+            eq(subscriptions.status, "active"),
+          ),
+        )
+        .limit(1)
+    : Promise.resolve([] as Array<{ id: string }>);
+
+  const [direct, brand] = await Promise.all([directActive, brandActive]);
+  if (direct.length === 0 && brand.length === 0) {
     await tx
       .update(places)
       .set({ isFeatured: false, updatedAt: new Date() })
@@ -182,13 +248,30 @@ async function maybeUnsetFeaturedFlag(
 }
 
 /**
- * Lista de subs paginada para /admin/promociones. Join lazy con places.
- * Default: todas las active primero, después las más recientes de cualquier estado.
+ * Cuando una sub a nivel brand expira/cancela, recorremos todos sus places
+ * y revertimos la flag a quienes no tengan otra sub justificándola.
+ */
+async function maybeUnsetFeaturedFlagForBrand(
+  tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+  brandId: string,
+): Promise<void> {
+  const brandPlaces = await tx
+    .select({ id: places.id })
+    .from(places)
+    .where(eq(places.brandId, brandId));
+  for (const p of brandPlaces) {
+    await maybeUnsetFeaturedFlagForPlace(tx, p.id);
+  }
+}
+
+/**
+ * Lista de subs paginada para /admin/promociones. LEFT JOIN con places y
+ * brands ya que una sub apunta a uno u otro.
  */
 export async function listSubscriptionsForAdmin(opts?: {
   status?: "active" | "expired" | "canceled" | "all";
   limit?: number;
-}): Promise<SubscriptionWithPlace[]> {
+}): Promise<SubscriptionWithTarget[]> {
   if (!isDbConfigured()) return [];
   const db = getDb();
   const limit = opts?.limit ?? 100;
@@ -201,24 +284,37 @@ export async function listSubscriptionsForAdmin(opts?: {
       placeSlug: places.slug,
       comunaSlug: places.comunaSlug,
       comunaLabel: places.comunaLabel,
+      brandName: brands.name,
+      brandSlug: brands.slug,
+      brandLogoUrl: brands.logoUrl,
     })
     .from(subscriptions)
-    .innerJoin(places, eq(places.id, subscriptions.placeId))
+    .leftJoin(places, eq(places.id, subscriptions.placeId))
+    .leftJoin(brands, eq(brands.id, subscriptions.brandId))
     .where(status === "all" ? undefined : eq(subscriptions.status, status))
     .orderBy(
-      // active arriba, después por created_at desc
       sql`CASE WHEN ${subscriptions.status} = 'active' THEN 0 ELSE 1 END`,
       desc(subscriptions.createdAt),
     )
     .limit(limit);
 
-  return rows.map((r) => ({
-    ...r.sub,
-    placeName: r.placeName,
-    placeSlug: r.placeSlug,
-    comunaSlug: r.comunaSlug,
-    comunaLabel: r.comunaLabel,
-  }));
+  return rows.map((r) => {
+    const isBrand = !!r.sub.brandId;
+    return {
+      ...r.sub,
+      placeName: r.placeName,
+      placeSlug: r.placeSlug,
+      comunaSlug: r.comunaSlug,
+      comunaLabel: r.comunaLabel,
+      brandName: r.brandName,
+      brandSlug: r.brandSlug,
+      brandLogoUrl: r.brandLogoUrl,
+      targetType: (isBrand ? "brand" : "place") as "brand" | "place",
+      targetLabel: isBrand
+        ? (r.brandName ?? "(cadena)")
+        : (r.placeName ?? "(local)"),
+    };
+  });
 }
 
 export async function getSubscriptionsForPlace(placeId: string): Promise<DbSubscription[]> {
@@ -242,8 +338,9 @@ export async function countActiveSubscriptions(): Promise<number> {
 }
 
 /**
- * True si el local tiene una sub `active` del tier solicitado (y vigente
- * por período). Usado como gate de features premium: stats, replies, +fotos.
+ * True si el local tiene una sub `active` del tier solicitado, ya sea
+ * directa al place o heredada por su brand. Gate de features premium:
+ * stats, replies, +fotos.
  */
 export async function hasActiveTier(
   placeId: string,
@@ -251,12 +348,25 @@ export async function hasActiveTier(
 ): Promise<boolean> {
   if (!isDbConfigured()) return false;
   const db = getDb();
+
+  // Place tiene brand? Hacemos un solo round-trip con OR.
+  const [placeRow] = await db
+    .select({ brandId: places.brandId })
+    .from(places)
+    .where(eq(places.id, placeId))
+    .limit(1);
+  const brandId = placeRow?.brandId ?? null;
+
+  const targetMatch = brandId
+    ? or(eq(subscriptions.placeId, placeId), eq(subscriptions.brandId, brandId))
+    : eq(subscriptions.placeId, placeId);
+
   const [row] = await db
     .select({ id: subscriptions.id })
     .from(subscriptions)
     .where(
       and(
-        eq(subscriptions.placeId, placeId),
+        targetMatch,
         eq(subscriptions.tier, tier),
         eq(subscriptions.status, "active"),
       ),

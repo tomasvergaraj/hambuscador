@@ -191,6 +191,13 @@ export const places = pgTable(
      * mapa y (futuro) prioridad sutil en listados. Solo togglable por admin.
      */
     isFeatured: boolean("is_featured").notNull().default(false),
+    /**
+     * Cadena (brand) a la que pertenece el local. NULL para independientes.
+     * Cuando la brand tiene logo, el pin del mapa lo usa (sobre el burger
+     * default). Una sub a nivel brand puede propagar is_featured a todos
+     * los places con brand_id = X.
+     */
+    brandId: uuid("brand_id").references(() => brands.id, { onDelete: "set null" }),
 
     // Agregados denormalizados (se actualizan al insertar/borrar review)
     ratingAvg: numeric("rating_avg", { precision: 3, scale: 2 }),
@@ -205,8 +212,39 @@ export const places = pgTable(
     comunaSlugIdx: uniqueIndex("places_comuna_slug_idx").on(table.comunaSlug, table.slug),
     statusIdx: index("places_moderation_status_idx").on(table.moderationStatus),
     nameIdx: index("places_name_idx").on(table.name),
+    brandIdx: index("places_brand_idx").on(table.brandId),
   }),
 );
+
+/**
+ * Cadenas (brands) — McDonald's, Burger King, Streat Burger, etc. Agrupa
+ * varios `places` bajo una marca. Cuando la brand tiene `logo_url`, el pin
+ * del mapa de cada place que pertenece a ella se renderiza con el logo
+ * (sobre el burger SVG default).
+ *
+ * Billing: una sub a nivel brand cubre todos los places de la cadena
+ * (un Quarter Pounder paga 1 vez, propaga a sus 80 locales). Ver el tier
+ * `brand` en `subscriptions` (otra migration cuando se wire).
+ *
+ * Migration: `drizzle/2026-05-15-brands.sql`.
+ */
+export const brands = pgTable("brands", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** Slug ASCII para identificarla en admin URLs. Inmutable. */
+  slug: text("slug").notNull().unique(),
+  /** Nombre display, ej "Burger King". */
+  name: text("name").notNull(),
+  /** URL de logo cuadrado en R2 (idealmente PNG con fondo transparente). */
+  logoUrl: text("logo_url"),
+  /** Color de marca en hex, ej `#E31837` (BK rojo). Opcional, pa pin custom. */
+  color: text("color"),
+  /** Sitio oficial corporativo (opcional). */
+  website: text("website"),
+  /** False oculta del mapa (los places vuelven al pin default). */
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const reviews = pgTable(
   "reviews",
@@ -595,10 +633,15 @@ export const picasLists = pgTable(
  * Tiers de publicidad:
  * - `featured`: boost en sorts + pin tomate en mapa + badge "destacado".
  * - `premium`: incluye featured + stats de owner (views/clicks) + responder
- *    reseñas + límite fotos extendido (15 vs 6). Otorgado por suscripción
- *    aparte: un local PUEDE tener active simultáneamente una de cada tier.
+ *    reseñas + límite fotos extendido (15 vs 6).
+ * - `promo`: habilita publicar promociones (descuento, producto destacado).
+ *    Aparece en carousel home + pin ring tomate cuando hay promo activa.
+ *
+ * Un local PUEDE tener active simultáneamente subs de distintos tiers.
+ * Subs a nivel `brand` solo soportan featured/premium — promos son
+ * por local específico.
  */
-export const subscriptionTierEnum = ["featured", "premium"] as const;
+export const subscriptionTierEnum = ["featured", "premium", "promo"] as const;
 export type SubscriptionTier = (typeof subscriptionTierEnum)[number];
 
 export const subscriptionStatusEnum = ["active", "expired", "canceled"] as const;
@@ -611,9 +654,17 @@ export const subscriptions = pgTable(
   "subscriptions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    placeId: uuid("place_id")
-      .notNull()
-      .references(() => places.id, { onDelete: "cascade" }),
+    /**
+     * Target del cobro. Exactamente uno entre `place_id` y `brand_id` está
+     * seteado (CHECK constraint en SQL). Sub a `place_id` boostea ese local
+     * solo; sub a `brand_id` boostea todos los places de la cadena.
+     */
+    placeId: uuid("place_id").references(() => places.id, {
+      onDelete: "cascade",
+    }),
+    brandId: uuid("brand_id").references(() => brands.id, {
+      onDelete: "cascade",
+    }),
     tier: text("tier", { enum: subscriptionTierEnum }).notNull(),
     status: text("status", { enum: subscriptionStatusEnum })
       .notNull()
@@ -643,6 +694,7 @@ export const subscriptions = pgTable(
   },
   (table) => ({
     placeIdx: index("subscriptions_place_idx").on(table.placeId),
+    brandIdx: index("subscriptions_brand_idx").on(table.brandId),
     /**
      * Cron de expiración: `WHERE status='active' AND current_period_end <= NOW()`.
      * Sin este índice el cron hace seq scan completo a 1k+ subs.
@@ -652,13 +704,16 @@ export const subscriptions = pgTable(
       table.currentPeriodEnd,
     ),
     /**
-     * Invariante: máximo UNA active por (place, tier). Renovaciones requieren
-     * que la sub vieja ya esté `expired`/`canceled`. El cron + admin se
-     * encargan de transicionar el estado antes de crear la nueva.
+     * Invariante: máximo UNA active por (place, tier) y por (brand, tier).
+     * Partial sobre `place_id IS NOT NULL` y `brand_id IS NOT NULL` así no
+     * conflictan las subs de cadena con las de local.
      */
-    activeUniqueIdx: uniqueIndex("subscriptions_active_place_tier_idx")
+    activeUniquePlaceIdx: uniqueIndex("subscriptions_active_place_tier_idx")
       .on(table.placeId, table.tier)
-      .where(sql`status = 'active'`),
+      .where(sql`status = 'active' AND place_id IS NOT NULL`),
+    activeUniqueBrandIdx: uniqueIndex("subscriptions_active_brand_tier_idx")
+      .on(table.brandId, table.tier)
+      .where(sql`status = 'active' AND brand_id IS NOT NULL`),
   }),
 );
 
@@ -746,6 +801,85 @@ export const reviewReplies = pgTable(
   }),
 );
 
+/**
+ * Promociones de contenido (descuento %, producto destacado, combo).
+ * El local debe tener sub `promo` o `premium` active para crear/mantener.
+ *
+ * Render:
+ *  - Carousel "promociones" en home (top), filtrado por región del user.
+ *  - Pin con ring tomate en el mapa (sobre el pin default o el logo brand).
+ *  - Card destacada en la ficha del local.
+ *
+ * Moderación: la primera versión la crea el admin (auto-approved). Cuando
+ * abramos la creación a owners (Fase 3), default `pending` y admin valida.
+ *
+ * Migration: `drizzle/2026-05-15-promotions.sql`.
+ */
+export const promotionKindEnum = [
+  "percent_discount",
+  "featured_product",
+  "combo",
+] as const;
+export type PromotionKind = (typeof promotionKindEnum)[number];
+
+export const promotionModerationEnum = [
+  "pending",
+  "approved",
+  "rejected",
+] as const;
+export type PromotionModerationStatus = (typeof promotionModerationEnum)[number];
+
+export const promotions = pgTable(
+  "promotions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: promotionKindEnum }).notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    /** Solo si kind = percent_discount: 1-99. */
+    discountPct: integer("discount_pct"),
+    photoUrl: text("photo_url"),
+    /**
+     * Denormalizado desde places.region pa filtrar el carousel home por
+     * región sin join. Update propagado por trigger/admin si cambia.
+     */
+    regionLabel: text("region_label"),
+    startsAt: timestamp("starts_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    moderationStatus: text("moderation_status", {
+      enum: promotionModerationEnum,
+    })
+      .notNull()
+      .default("approved"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    placeIdx: index("promotions_place_idx").on(table.placeId),
+    /** Carousel home: query por (region, active, approved) ordenado por ends_at. */
+    homeIdx: index("promotions_home_idx").on(
+      table.regionLabel,
+      table.isActive,
+      table.endsAt,
+    ),
+    /** Cleanup retention / expire cron: ends_at < now ya inactivas. */
+    endsAtIdx: index("promotions_ends_at_idx").on(table.endsAt),
+  }),
+);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -790,6 +924,10 @@ export type DbPlaceEvent = typeof placeEvents.$inferSelect;
 export type NewDbPlaceEvent = typeof placeEvents.$inferInsert;
 export type DbReviewReply = typeof reviewReplies.$inferSelect;
 export type NewDbReviewReply = typeof reviewReplies.$inferInsert;
+export type DbBrand = typeof brands.$inferSelect;
+export type NewDbBrand = typeof brands.$inferInsert;
+export type DbPromotion = typeof promotions.$inferSelect;
+export type NewDbPromotion = typeof promotions.$inferInsert;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

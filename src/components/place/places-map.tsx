@@ -18,8 +18,22 @@ import type { Place } from "@/types/place";
  */
 export type MapPlace = Pick<
   Place,
-  "id" | "slug" | "comuna" | "comunaLabel" | "name" | "rating" | "isFeatured" | "coords"
->;
+  | "id"
+  | "slug"
+  | "comuna"
+  | "comunaLabel"
+  | "name"
+  | "rating"
+  | "isFeatured"
+  | "coords"
+> & {
+  /** Brand del local (si pertenece a cadena). Render con logo en pin si logoUrl. */
+  brandId?: string | null;
+  brandLogoUrl?: string | null;
+  brandName?: string | null;
+  /** Tiene al menos una promo active. Render con ring tomate alrededor del pin. */
+  hasActivePromo?: boolean;
+};
 
 type Feature = {
   type: "Feature";
@@ -31,40 +45,126 @@ type Feature = {
     rating: number;
     /** Locales con publicidad activa. Render con pin tomate + glow ring. */
     featured: boolean;
+    /** Tiene promo active — ring tomate alrededor del pin (cualquier variante). */
+    hasPromo: boolean;
+    /** Icon-image registrado pa este pin (brand logo). Vacío = default. */
+    brandIcon?: string;
   };
   geometry: { type: "Point"; coordinates: [number, number] };
 };
 
+function brandIconId(brandId: string): string {
+  return `brand-${brandId}`;
+}
+
 function buildFeatures(places: MapPlace[]): Feature[] {
   return places
     .filter((p) => Number.isFinite(p.coords.lat) && Number.isFinite(p.coords.lng))
-    .map((p) => ({
-      type: "Feature" as const,
-      properties: {
-        id: p.id,
-        name: p.name,
-        comuna: p.comunaLabel,
-        href: `/${p.comuna}/${p.slug}`,
-        rating: p.rating,
-        featured: p.isFeatured,
-      },
-      geometry: { type: "Point" as const, coordinates: [p.coords.lng, p.coords.lat] },
-    }));
+    .map((p) => {
+      const hasBrandLogo = !!(p.brandId && p.brandLogoUrl);
+      return {
+        type: "Feature" as const,
+        properties: {
+          id: p.id,
+          name: p.name,
+          comuna: p.comunaLabel,
+          href: `/${p.comuna}/${p.slug}`,
+          rating: p.rating,
+          featured: p.isFeatured,
+          hasPromo: !!p.hasActivePromo,
+          ...(hasBrandLogo
+            ? { brandIcon: brandIconId(p.brandId as string) }
+            : {}),
+        },
+        geometry: { type: "Point" as const, coordinates: [p.coords.lng, p.coords.lat] },
+      };
+    });
+}
+
+/** Features con promo active — pa una source aparte que pinta solo el ring. */
+function promoFeatures(features: Feature[]): Feature[] {
+  return features.filter((f) => f.properties.hasPromo);
 }
 
 /**
- * Separa features en `default` y `featured`. Los featured viven en una
- * source aparte sin clustering — siempre visibles en cualquier zoom y
- * nunca quedan absorbidos en los círculos negros del cluster.
+ * Separa features en `default`, `featured` y `brand`. Brand gana sobre
+ * featured (cuando un place tiene logo de cadena, mostramos el logo). Pa
+ * features con brand pero sin logoUrl válido, caen a default/featured.
  */
-function splitFeatures(features: Feature[]): { default: Feature[]; featured: Feature[] } {
+function splitFeatures(features: Feature[]): {
+  default: Feature[];
+  featured: Feature[];
+  brand: Feature[];
+} {
   const def: Feature[] = [];
   const fea: Feature[] = [];
+  const brand: Feature[] = [];
   for (const f of features) {
-    if (f.properties.featured) fea.push(f);
+    if (f.properties.brandIcon) brand.push(f);
+    else if (f.properties.featured) fea.push(f);
     else def.push(f);
   }
-  return { default: def, featured: fea };
+  return { default: def, featured: fea, brand };
+}
+
+function uniqueBrandLogos(places: MapPlace[]): Array<{ id: string; url: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ id: string; url: string }> = [];
+  for (const p of places) {
+    if (!p.brandId || !p.brandLogoUrl) continue;
+    if (seen.has(p.brandId)) continue;
+    seen.add(p.brandId);
+    out.push({ id: p.brandId, url: p.brandLogoUrl });
+  }
+  return out;
+}
+
+/**
+ * Carga el logo de una brand desde R2, lo recorta como circle 80×80 sobre
+ * fondo crema con borde carbon (estilo pin). Devuelve ImageData para
+ * `map.addImage`. Si falla, retorna null y el caller cae al pin default.
+ */
+async function loadBrandPinImage(url: string): Promise<ImageData | null> {
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    await img.decode();
+    const size = 80;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size * 1.3; // espacio pa la teardrop tail
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    // Teardrop background (mismo path que BURGER_PIN_SVG pero scaled).
+    ctx.fillStyle = "#FAF6EE";
+    ctx.strokeStyle = "#1F1B17";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(size / 2, 4);
+    ctx.bezierCurveTo(size - 6, 4, size - 6, size * 0.6, size / 2, size * 1.3 - 4);
+    ctx.bezierCurveTo(6, size * 0.6, 6, 4, size / 2, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Clip circle pa el logo.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2.2, size * 0.36, 0, Math.PI * 2);
+    ctx.clip();
+    const targetSize = size * 0.72;
+    ctx.drawImage(
+      img,
+      (size - targetSize) / 2,
+      size / 2.2 - targetSize / 2,
+      targetSize,
+      targetSize,
+    );
+    ctx.restore();
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================
@@ -327,6 +427,20 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           // missing-image placeholder pequeño y el mapa sigue usable.
         }
 
+        // Brand logos: pre-fetch únicos y addImage. Errores → silent fallback
+        // (el pin queda como missing-image hasta que se loadea otra vez).
+        const brandImages = await Promise.all(
+          uniqueBrandLogos(places).map(async (b) => {
+            const data = await loadBrandPinImage(b.url);
+            return { id: brandIconId(b.id), data };
+          }),
+        );
+        for (const b of brandImages) {
+          if (b.data && !map.hasImage(b.id)) {
+            map.addImage(b.id, b.data, { pixelRatio: 2 });
+          }
+        }
+
         // Dos sources distintos:
         //  - `places`: defaults (no destacados), con clustering. Se agrupan
         //    en círculos negros cuando son muchos en poco espacio.
@@ -344,6 +458,19 @@ export function PlacesMap({ places, userCoords, className }: Props) {
         map.addSource("places-featured", {
           type: "geojson",
           data: { type: "FeatureCollection", features: split.featured },
+        });
+        map.addSource("places-brand", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: split.brand },
+        });
+        // Ring de promo — features con hasPromo: true (puede overlap con
+        // cualquiera de las otras sources). Solo dibuja el circle, no el icon.
+        map.addSource("places-promo", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: promoFeatures(initialFeatures),
+          },
         });
         sourceReadyRef.current = true;
 
@@ -404,6 +531,22 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           },
         });
 
+        // Promo ring — circle layer DEBAJO de los pin symbols. Pintura
+        // primero → queda "atrás" del icono.
+        map.addLayer({
+          id: "promo-ring",
+          type: "circle",
+          source: "places-promo",
+          paint: {
+            "circle-radius": 22,
+            "circle-color": "#C84B31",
+            "circle-opacity": 0,
+            "circle-stroke-color": "#C84B31",
+            "circle-stroke-width": 3,
+            "circle-stroke-opacity": 0.85,
+          },
+        });
+
         map.addLayer({
           id: "pins-default",
           type: "symbol",
@@ -426,6 +569,21 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           source: "places-featured",
           layout: {
             "icon-image": "burger-pin-featured",
+            "icon-anchor": "bottom",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-size": 1,
+          },
+        });
+
+        // Brand pins — gana sobre featured visualmente. icon-image se resuelve
+        // por feature property (cada brand tiene su propia imagen registrada).
+        map.addLayer({
+          id: "pins-brand",
+          type: "symbol",
+          source: "places-brand",
+          layout: {
+            "icon-image": ["get", "brandIcon"],
             "icon-anchor": "bottom",
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
@@ -472,6 +630,7 @@ export function PlacesMap({ places, userCoords, className }: Props) {
 
         map.on("click", "pins-default", handlePinClick);
         map.on("click", "pins-featured", handlePinClick);
+        map.on("click", "pins-brand", handlePinClick);
 
         map.on("click", "clusters", async (e) => {
           if (!map || !e.features || e.features.length === 0) return;
@@ -495,7 +654,7 @@ export function PlacesMap({ places, userCoords, className }: Props) {
           map.easeTo({ center: coords, zoom });
         });
 
-        for (const layer of ["pins-default", "pins-featured", "clusters"]) {
+        for (const layer of ["pins-default", "pins-featured", "pins-brand", "clusters"]) {
           map.on("mouseenter", layer, () => {
             if (map) map.getCanvas().style.cursor = "pointer";
           });
@@ -572,18 +731,54 @@ export function PlacesMap({ places, userCoords, className }: Props) {
     const map = mapRef.current;
     if (!map) return;
     const split = splitFeatures(buildFeatures(places));
-    const apply = () => {
+    const apply = async () => {
       const defaultSrc = map.getSource("places") as
         | import("maplibre-gl").GeoJSONSource
         | undefined;
       const featuredSrc = map.getSource("places-featured") as
         | import("maplibre-gl").GeoJSONSource
         | undefined;
+      const brandSrc = map.getSource("places-brand") as
+        | import("maplibre-gl").GeoJSONSource
+        | undefined;
+      const promoSrc = map.getSource("places-promo") as
+        | import("maplibre-gl").GeoJSONSource
+        | undefined;
+      const allFeatures = buildFeatures(places);
+
+      // Pre-cargar logos de brands que aparecen ahora y no estaban antes.
+      // map.hasImage() filtra los ya registrados — barato.
+      const pending = uniqueBrandLogos(places).filter(
+        (b) => !map.hasImage(brandIconId(b.id)),
+      );
+      if (pending.length > 0) {
+        const loaded = await Promise.all(
+          pending.map(async (b) => ({
+            id: brandIconId(b.id),
+            data: await loadBrandPinImage(b.url),
+          })),
+        );
+        for (const b of loaded) {
+          if (b.data && !map.hasImage(b.id)) {
+            map.addImage(b.id, b.data, { pixelRatio: 2 });
+          }
+        }
+      }
+
       if (defaultSrc) {
         defaultSrc.setData({ type: "FeatureCollection", features: split.default });
       }
       if (featuredSrc) {
         featuredSrc.setData({ type: "FeatureCollection", features: split.featured });
+      }
+      if (brandSrc) {
+        brandSrc.setData({ type: "FeatureCollection", features: split.brand });
+      }
+      if (promoSrc) {
+        promoSrc.setData({
+          type: "FeatureCollection",
+          features: promoFeatures(allFeatures),
+        });
       }
     };
     if (sourceReadyRef.current) {

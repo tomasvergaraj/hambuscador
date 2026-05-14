@@ -59,6 +59,7 @@ const editSchema = z.object({
   photos: z.array(z.string().url()).max(6).default([]),
   isVerified: z.coerce.boolean().optional(),
   isFeatured: z.coerce.boolean().optional(),
+  brandId: z.string().uuid().optional().nullable().or(z.literal("")),
 });
 
 export type UpdatePlaceState = { error?: string; ok?: boolean };
@@ -106,6 +107,7 @@ export async function updatePlaceAction(
     photos: formData.getAll("photos").filter((v): v is string => typeof v === "string"),
     isVerified: formData.get("isVerified") === "on",
     isFeatured: formData.get("isFeatured") === "on",
+    brandId: formData.get("brandId") || null,
   });
 
   if (!parsed.success) {
@@ -133,6 +135,7 @@ export async function updatePlaceAction(
     photos: parsed.data.photos,
     isVerified: parsed.data.isVerified ?? false,
     isFeatured: parsed.data.isFeatured ?? false,
+    brandId: parsed.data.brandId || null,
   });
 
   // Invalidar cache para que el público vea el cambio inmediato.

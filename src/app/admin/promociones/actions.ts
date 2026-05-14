@@ -10,14 +10,20 @@ import {
   createSubscription,
 } from "@/server/services/subscriptions";
 
-const createSchema = z.object({
-  placeId: z.string().uuid("placeId inválido"),
-  tier: z.enum(["featured", "premium"]).default("featured"),
-  amountClp: z.coerce.number().int().nonnegative().max(10_000_000),
-  periodDays: z.coerce.number().int().min(1).max(365),
-  notes: z.string().trim().max(500).optional().nullable(),
-  externalId: z.string().trim().max(120).optional().nullable(),
-});
+const createSchema = z
+  .object({
+    placeId: z.string().uuid().optional().nullable(),
+    brandId: z.string().uuid().optional().nullable(),
+    tier: z.enum(["featured", "premium", "promo"]).default("featured"),
+    amountClp: z.coerce.number().int().nonnegative().max(10_000_000),
+    periodDays: z.coerce.number().int().min(1).max(365),
+    notes: z.string().trim().max(500).optional().nullable(),
+    externalId: z.string().trim().max(120).optional().nullable(),
+  })
+  .refine(
+    (data) => (data.placeId ? 1 : 0) + (data.brandId ? 1 : 0) === 1,
+    { message: "elige local O cadena (no ambos)" },
+  );
 
 async function requireAdmin(): Promise<string> {
   const session = await auth();
@@ -31,7 +37,8 @@ export async function createSubscriptionAction(formData: FormData) {
   const adminId = await requireAdmin();
 
   const parsed = createSchema.safeParse({
-    placeId: formData.get("placeId"),
+    placeId: formData.get("placeId") || null,
+    brandId: formData.get("brandId") || null,
     tier: formData.get("tier") || "featured",
     amountClp: formData.get("amountClp"),
     periodDays: formData.get("periodDays"),
@@ -45,7 +52,8 @@ export async function createSubscriptionAction(formData: FormData) {
   }
 
   await createSubscription({
-    placeId: parsed.data.placeId,
+    placeId: parsed.data.placeId ?? null,
+    brandId: parsed.data.brandId ?? null,
     tier: parsed.data.tier,
     amountClp: parsed.data.amountClp,
     periodDays: parsed.data.periodDays,

@@ -1,4 +1,4 @@
-import { IconChartBar, IconExternalLink } from "@tabler/icons-react";
+import { IconChartBar, IconExternalLink, IconPercentage } from "@tabler/icons-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -64,13 +64,20 @@ export default async function MiLocalEditarPage({
               {place.comunaLabel} · {place.region}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Link
               href={`/mi-local/${place.id}/stats`}
               className="inline-flex items-center gap-1 text-xs text-carbon bg-crema-deep border border-crema-edge hover:bg-white px-3 py-1.5 rounded-full transition-colors"
             >
               <IconChartBar size={14} />
               stats
+            </Link>
+            <Link
+              href={`/mi-local/${place.id}/ofertas`}
+              className="inline-flex items-center gap-1 text-xs text-carbon bg-crema-deep border border-crema-edge hover:bg-white px-3 py-1.5 rounded-full transition-colors"
+            >
+              <IconPercentage size={14} />
+              ofertas
             </Link>
             <Link
               href={`/${place.comuna}/${place.slug}`}

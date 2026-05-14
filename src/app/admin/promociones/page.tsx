@@ -77,22 +77,35 @@ export default async function AdminPromocionesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <Link
-                        href={`/${sub.comunaSlug}/${sub.placeSlug}`}
-                        target="_blank"
-                        rel="noopener"
-                        className="font-display font-semibold text-sm text-carbon hover:text-mostaza-deep truncate inline-flex items-center gap-1"
-                      >
-                        {sub.placeName}
-                        <IconExternalLink
-                          size={12}
-                          className="text-bronceado shrink-0"
-                          aria-hidden="true"
-                        />
-                      </Link>
+                      {sub.targetType === "place" && sub.placeSlug && sub.comunaSlug ? (
+                        <Link
+                          href={`/${sub.comunaSlug}/${sub.placeSlug}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="font-display font-semibold text-sm text-carbon hover:text-mostaza-deep truncate inline-flex items-center gap-1"
+                        >
+                          {sub.targetLabel}
+                          <IconExternalLink
+                            size={12}
+                            className="text-bronceado shrink-0"
+                            aria-hidden="true"
+                          />
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/admin/brands/${sub.brandId}`}
+                          className="font-display font-semibold text-sm text-carbon hover:text-mostaza-deep truncate inline-flex items-center gap-1"
+                        >
+                          <span className="text-[10px] uppercase tracking-widest font-medium bg-mostaza/15 text-mostaza-deep px-1 py-0.5 rounded mr-1">
+                            cadena
+                          </span>
+                          {sub.targetLabel}
+                        </Link>
+                      )}
                     </div>
                     <p className="text-[11px] text-bronceado">
-                      {sub.comunaLabel} · {sub.tier} · {formatClp(sub.amountClp)}
+                      {sub.targetType === "place" ? sub.comunaLabel : "todos los locales"} ·{" "}
+                      {sub.tier} · {formatClp(sub.amountClp)}
                     </p>
                     <p
                       className={
@@ -147,14 +160,26 @@ export default async function AdminPromocionesPage() {
                 >
                   {sub.status}
                 </span>
-                <Link
-                  href={`/${sub.comunaSlug}/${sub.placeSlug}`}
-                  target="_blank"
-                  rel="noopener"
-                  className="font-medium text-carbon hover:underline truncate flex-1"
-                >
-                  {sub.placeName}
-                </Link>
+                {sub.targetType === "place" && sub.placeSlug && sub.comunaSlug ? (
+                  <Link
+                    href={`/${sub.comunaSlug}/${sub.placeSlug}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="font-medium text-carbon hover:underline truncate flex-1"
+                  >
+                    {sub.targetLabel}
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/admin/brands/${sub.brandId}`}
+                    className="font-medium text-carbon hover:underline truncate flex-1"
+                  >
+                    <span className="text-[10px] uppercase tracking-widest font-medium bg-mostaza/15 text-mostaza-deep px-1 py-0.5 rounded mr-1">
+                      cadena
+                    </span>
+                    {sub.targetLabel}
+                  </Link>
+                )}
                 <span className="text-bronceado shrink-0">
                   {formatClp(sub.amountClp)} · {formatDate(sub.currentPeriodEnd)}
                 </span>

@@ -1,13 +1,15 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { getAllBrands } from "@/server/services/brands";
 
 import { createSubscriptionAction } from "../actions";
-import { PlacePicker } from "../place-picker";
+import { TargetSelector } from "../target-selector";
 
 export const metadata = { title: "admin · nueva promoción" };
 
-export default function NuevaPromocionPage() {
+export default async function NuevaPromocionPage() {
+  const brands = await getAllBrands();
   return (
     <main className="px-4 py-5 flex-1 max-w-2xl mx-auto w-full">
       <header className="mb-4">
@@ -33,9 +35,11 @@ export default function NuevaPromocionPage() {
       >
         <div>
           <label className="text-xs font-medium text-carbon mb-1 block">
-            local
+            target
           </label>
-          <PlacePicker />
+          <TargetSelector
+            brands={brands.map((b) => ({ id: b.id, name: b.name, slug: b.slug }))}
+          />
         </div>
 
         <div>
@@ -57,6 +61,9 @@ export default function NuevaPromocionPage() {
             </option>
             <option value="premium">
               premium — featured + stats owner + responder + +fotos (15)
+            </option>
+            <option value="promo">
+              promo — habilita ofertas (descuentos, productos) + ring tomate
             </option>
           </select>
         </div>

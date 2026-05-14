@@ -15,6 +15,8 @@ import { GEO_COOKIE_NAME, parseGeoCookie } from "@/lib/geo";
 import { type PicasList } from "@/lib/picas";
 import { normalizeForSearch } from "@/lib/search";
 import { auth } from "@/server/auth";
+import { getBrandsForPlaceIds } from "@/server/services/brands";
+import { getPlaceIdsWithActivePromotions } from "@/server/services/promotions";
 import { logSearch } from "@/server/services/search-logs";
 
 // PlacesMap pesa lo suyo (MapLibre + pmtiles + CSS de maplibre-gl). En vista
@@ -122,20 +124,39 @@ export default async function BuscarPage({
   // Vista mapa: layout fullscreen con todos los controles flotando encima.
   // ============================================================================
   if (view === "mapa") {
-    // Proyectar a MapPlace antes de pasar al cliente — el mapa solo usa 8
-    // campos (id, name, comuna*, slug, rating, isFeatured, coords). Con
-    // limit=5000 en mapa, serializar el Place full sumaría ~3MB; el subset
-    // pesa ~600KB.
-    const mapPlaces = results.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      comuna: p.comuna,
-      comunaLabel: p.comunaLabel,
-      name: p.name,
-      rating: p.rating,
-      isFeatured: p.isFeatured,
-      coords: p.coords,
-    }));
+    // Proyectar a MapPlace antes de pasar al cliente — el mapa solo usa ~10
+    // campos. Con limit=5000 en mapa, serializar el Place full sumaría ~3MB.
+    // Brand info enriquecida con una query batch contra brands.
+    const placeIdsWithBrand = results
+      .filter((p) => !!p.brandId)
+      .map((p) => p.id);
+    const allPlaceIds = results.map((p) => p.id);
+    const [brandMap, promoSet] = await Promise.all([
+      placeIdsWithBrand.length > 0
+        ? getBrandsForPlaceIds(placeIdsWithBrand)
+        : Promise.resolve(new Map()),
+      allPlaceIds.length > 0
+        ? getPlaceIdsWithActivePromotions(allPlaceIds)
+        : Promise.resolve(new Set<string>()),
+    ]);
+
+    const mapPlaces = results.map((p) => {
+      const brand = p.brandId ? brandMap.get(p.id) : null;
+      return {
+        id: p.id,
+        slug: p.slug,
+        comuna: p.comuna,
+        comunaLabel: p.comunaLabel,
+        name: p.name,
+        rating: p.rating,
+        isFeatured: p.isFeatured,
+        coords: p.coords,
+        brandId: brand?.id ?? null,
+        brandLogoUrl: brand?.logoUrl ?? null,
+        brandName: brand?.name ?? null,
+        hasActivePromo: promoSet.has(p.id),
+      };
+    });
     return (
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <PlacesMap

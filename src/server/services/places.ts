@@ -50,6 +50,7 @@ function dbPlaceToUi(row: DbPlace, distanceM?: number): Place {
     isVerified: row.isVerified,
     isFeatured: row.isFeatured,
     isClaimed: !!row.claimedBy,
+    brandId: row.brandId,
   };
 }
 
@@ -504,6 +505,8 @@ export async function updatePlace(
     isFeatured?: boolean;
     /** Set to null para revocar owner de un local. */
     claimedBy?: string | null;
+    /** Set to null para desasignar de la cadena. */
+    brandId?: string | null;
   },
 ): Promise<void> {
   if (!isDbConfigured()) {
@@ -534,6 +537,7 @@ export async function updatePlace(
   if (patch.isVerified !== undefined) updates.isVerified = patch.isVerified;
   if (patch.isFeatured !== undefined) updates.isFeatured = patch.isFeatured;
   if (patch.claimedBy !== undefined) updates.claimedBy = patch.claimedBy;
+  if (patch.brandId !== undefined) updates.brandId = patch.brandId;
 
   await db.update(places).set(updates).where(eq(places.id, placeId));
 }
