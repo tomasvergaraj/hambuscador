@@ -6,6 +6,7 @@ import {
   IconCash,
   IconClock,
   IconFlame,
+  IconPercentage,
   IconMapPin,
   IconPencil,
   IconPhone,
@@ -16,9 +17,12 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
+
+import type { DbPromotion } from "@/server/db/schema";
 
 import { OwnerReplyForm } from "@/components/place/owner-reply";
 import { PhotoCarousel } from "@/components/place/photo-carousel";
@@ -38,6 +42,7 @@ import { ShareButton } from "@/components/place/share-button";
 import { auth } from "@/server/auth";
 import { hasPendingClaim, isOwnerOf } from "@/server/services/claims";
 import { isFavorite } from "@/server/services/favorites";
+import { getActivePromotionsForPlace } from "@/server/services/promotions";
 import { getMyReviewWithAuthor } from "@/server/services/reviews";
 import { hasActivePremium } from "@/server/services/subscriptions";
 
@@ -95,7 +100,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
   // Mine va aparte (con JOIN a users) y `others` excluye su id, así no
   // overfetcheamos. Antes pedíamos 20 reseñas para mostrar 2 + buscar la
   // propia en el array — ahora son ~7 queries en paralelo, todas baratas.
-  const [mine, others, favorited, isOwner, claimPending, isPremium] = await Promise.all([
+  const [mine, others, favorited, isOwner, claimPending, isPremium, promos] = await Promise.all([
     userId ? getMyReviewWithAuthor(place.id, userId) : Promise.resolve(null),
     getReviewsByPlaceId(
       place.id,
@@ -105,6 +110,7 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
     userId ? isOwnerOf(userId, place.id) : Promise.resolve(false),
     userId ? hasPendingClaim(place.id, userId) : Promise.resolve(false),
     hasActivePremium(place.id),
+    getActivePromotionsForPlace(place.id),
   ]);
   const canEdit = isAdmin || isOwner;
   const canReplyAsOwner = isOwner && isPremium;
@@ -266,6 +272,23 @@ export default async function PlaceDetailPage({ params }: { params: Promise<Para
             </li>
           )}
         </ul>
+
+        {promos.length > 0 && (
+          <section
+            aria-labelledby="promos-heading"
+            className="mt-5 flex flex-col gap-2"
+          >
+            <h2
+              id="promos-heading"
+              className="text-[11px] uppercase tracking-widest text-bronceado font-medium"
+            >
+              ofertas activas
+            </h2>
+            {promos.map((promo) => (
+              <PlacePromoCard key={promo.id} promo={promo} />
+            ))}
+          </section>
+        )}
 
         {/* Action buttons — links accionables. Mobile abre app nativa cuando existe.
             data-track-channel: capturado por <PlaceTracker> pa analytics. */}
@@ -565,6 +588,79 @@ type ActionLinkProps = {
   target?: "_blank";
   trackChannel?: "whatsapp" | "instagram" | "website" | "maps" | "phone";
 };
+
+const PROMO_KIND_LABEL: Record<string, string> = {
+  percent_discount: "% descuento",
+  featured_product: "producto destacado",
+  combo: "combo",
+};
+
+function formatPromoEnds(d: Date | string): string {
+  const date = new Date(d);
+  const days = Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "vence hoy";
+  if (days === 1) return "vence mañana";
+  if (days <= 14) return `quedan ${days} días`;
+  return `hasta ${new Intl.DateTimeFormat("es-CL", {
+    day: "2-digit",
+    month: "short",
+  }).format(date)}`;
+}
+
+function PlacePromoCard({ promo }: { promo: DbPromotion }) {
+  const isDiscount = promo.kind === "percent_discount" && !!promo.discountPct;
+  return (
+    <article className="bg-white border border-tomate/30 rounded-xl overflow-hidden">
+      {promo.photoUrl ? (
+        <div className="relative h-32 bg-tomate/10">
+          <Image
+            src={promo.photoUrl}
+            alt={promo.title}
+            fill
+            sizes="(max-width: 768px) 100vw, 640px"
+            className="object-cover"
+            quality={75}
+          />
+          {isDiscount && (
+            <span className="absolute top-2 left-2 bg-tomate text-crema-deep font-display font-bold text-base px-2.5 py-1 rounded-md">
+              -{promo.discountPct}%
+            </span>
+          )}
+        </div>
+      ) : null}
+      <div className="p-3 flex items-start gap-3">
+        {!promo.photoUrl && (
+          <div className="w-14 h-14 shrink-0 rounded-lg bg-tomate/10 text-tomate flex items-center justify-center font-display font-bold">
+            {isDiscount ? (
+              <span className="text-base">-{promo.discountPct}%</span>
+            ) : (
+              <IconPercentage size={26} />
+            )}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-widest font-medium bg-tomate/15 text-tomate px-1.5 py-0.5 rounded">
+              {PROMO_KIND_LABEL[promo.kind] ?? "oferta"}
+            </span>
+            <span className="text-[10px] text-tomate font-medium inline-flex items-center gap-0.5">
+              <IconClock size={10} aria-hidden="true" />
+              {formatPromoEnds(promo.endsAt)}
+            </span>
+          </div>
+          <h3 className="font-display font-semibold text-sm text-carbon mt-1">
+            {promo.title}
+          </h3>
+          {promo.description && (
+            <p className="text-xs text-tinta-suave mt-1 leading-relaxed">
+              {promo.description}
+            </p>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
 
 function ActionLink({ href, icon: Icon, label, target, trackChannel }: ActionLinkProps) {
   return (
