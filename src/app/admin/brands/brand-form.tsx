@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-import { PhotoUploader } from "@/components/place/photo-uploader";
 import { Button } from "@/components/ui/button";
 import type { DbBrand } from "@/server/db/schema";
+
+import { BrandLogoPicker } from "./brand-logo-picker";
 
 type Props =
   | { mode: "create"; action: (formData: FormData) => Promise<void> }
@@ -16,7 +17,7 @@ type Props =
 
 export function BrandForm(props: Props) {
   const brand = props.mode === "edit" ? props.brand : null;
-  const [logo, setLogo] = useState<string[]>(brand?.logoUrl ? [brand.logoUrl] : []);
+  const [logoUrl, setLogoUrl] = useState<string | null>(brand?.logoUrl ?? null);
 
   return (
     <form
@@ -27,10 +28,11 @@ export function BrandForm(props: Props) {
         <label className="text-xs font-medium text-carbon mb-1 block">
           logo
         </label>
-        <PhotoUploader value={logo} onChange={setLogo} max={1} />
-        <input type="hidden" name="logoUrl" value={logo[0] ?? ""} />
-        <p className="text-[11px] text-bronceado mt-1">
-          PNG cuadrado con fondo transparente lee mejor en pin de mapa.
+        <BrandLogoPicker value={logoUrl} onChange={setLogoUrl} />
+        <input type="hidden" name="logoUrl" value={logoUrl ?? ""} />
+        <p className="text-[11px] text-bronceado mt-2">
+          subes la imagen y elegís qué parte sale dentro del pin con
+          drag/zoom. Logos cuadrados con fondo claro lucen mejor.
         </p>
       </div>
 

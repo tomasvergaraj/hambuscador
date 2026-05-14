@@ -120,9 +120,12 @@ function uniqueBrandLogos(places: MapPlace[]): Array<{ id: string; url: string }
 }
 
 /**
- * Carga el logo de una brand desde R2, lo recorta como circle 80×80 sobre
- * fondo crema con borde carbon (estilo pin). Devuelve ImageData para
- * `map.addImage`. Si falla, retorna null y el caller cae al pin default.
+ * Carga el logo de una brand desde R2 y lo componea sobre el mismo path
+ * teardrop que `BURGER_PIN_SVG` (escalado 2x → 80×104) pa que el pin de
+ * brand quede del MISMO TAMAÑO que el default. Interior matchea el círculo
+ * blanco del SVG (center 40,40 radius 23). Logo dibujado 46×46 centrado.
+ *
+ * Si falla, retorna null y el caller cae al pin default.
  */
 async function loadBrandPinImage(url: string): Promise<ImageData | null> {
   try {
@@ -130,37 +133,37 @@ async function loadBrandPinImage(url: string): Promise<ImageData | null> {
     img.crossOrigin = "anonymous";
     img.src = url;
     await img.decode();
-    const size = 80;
     const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size * 1.3; // espacio pa la teardrop tail
+    canvas.width = 80;
+    canvas.height = 104;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    // Teardrop background (mismo path que BURGER_PIN_SVG pero scaled).
+
+    // Path teardrop — copia exacta del BURGER_PIN_SVG (40x52 vbox) × 2.
     ctx.fillStyle = "#FAF6EE";
     ctx.strokeStyle = "#1F1B17";
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(size / 2, 4);
-    ctx.bezierCurveTo(size - 6, 4, size - 6, size * 0.6, size / 2, size * 1.3 - 4);
-    ctx.bezierCurveTo(6, size * 0.6, 6, 4, size / 2, 4);
+    ctx.moveTo(40, 4);
+    ctx.bezierCurveTo(19, 4, 4, 19, 4, 40);
+    ctx.bezierCurveTo(4, 60, 24, 84, 40, 100);
+    ctx.bezierCurveTo(56, 84, 76, 60, 76, 40);
+    ctx.bezierCurveTo(76, 19, 61, 4, 40, 4);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    // Clip circle pa el logo.
+
+    // Clip circle pa el logo (matchea inner circle del default: cx=40, cy=40, r=23).
     ctx.save();
     ctx.beginPath();
-    ctx.arc(size / 2, size / 2.2, size * 0.36, 0, Math.PI * 2);
+    ctx.arc(40, 40, 23, 0, Math.PI * 2);
     ctx.clip();
-    const targetSize = size * 0.72;
-    ctx.drawImage(
-      img,
-      (size - targetSize) / 2,
-      size / 2.2 - targetSize / 2,
-      targetSize,
-      targetSize,
-    );
+    // Logo 46×46 centrado — fit cover. Si el logo NO es cuadrado, los
+    // bordes quedan recortados (el crop fino lo elige el admin al subir).
+    const target = 46;
+    ctx.drawImage(img, 40 - target / 2, 40 - target / 2, target, target);
     ctx.restore();
+
     return ctx.getImageData(0, 0, canvas.width, canvas.height);
   } catch {
     return null;
