@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { sendDigestsForFrequency } from "@/server/services/email-digest";
+import { expireDueSubscriptions } from "@/server/services/subscriptions";
 import { deleteOldWebVitals } from "@/server/services/web-vitals";
 
 /**
@@ -52,9 +53,23 @@ export async function GET(req: NextRequest) {
     summary.failed,
   );
 
-  // Piggyback maintenance en el run weekly — Hobby tier nos limita a 2 crons,
-  // así que el lunes 12:00 UTC también limpia web_vitals viejos para que
-  // P75/P95 sigan baratos. Retention controlable via env (default 90d).
+  // Piggyback expiración de subscriptions en el run daily — Hobby tier nos
+  // limita a 2 crons. Las subs vencidas pasan a `expired` y revertimos
+  // `places.is_featured` para que dejen de boostearse.
+  let subscriptions: { expired: number } | null = null;
+  if (frequency === "daily") {
+    try {
+      subscriptions = await expireDueSubscriptions();
+      console.log("[cron/subscriptions] expired=", subscriptions.expired);
+    } catch (err) {
+      console.error("[cron/subscriptions] failed:", err);
+      subscriptions = { expired: 0 };
+    }
+  }
+
+  // Piggyback maintenance en el run weekly — el lunes 12:00 UTC también
+  // limpia web_vitals viejos para que P75/P95 sigan baratos. Retention
+  // controlable via env (default 90d).
   let maintenance: { webVitalsDeleted: number } | null = null;
   if (frequency === "weekly") {
     const retentionDays = Number(process.env.CWV_RETENTION_DAYS) || 90;
@@ -68,5 +83,5 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  return Response.json({ ...summary, maintenance });
+  return Response.json({ ...summary, subscriptions, maintenance });
 }

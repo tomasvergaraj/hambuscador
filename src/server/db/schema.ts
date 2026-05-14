@@ -579,6 +579,82 @@ export const picasLists = pgTable(
   }),
 );
 
+/**
+ * Suscripciones de publicidad pagada por local. MVP solo tier `featured`
+ * (mapea 1-a-1 con `places.is_featured`). El admin crea la sub al recibir
+ * pago manual (transferencia/Khipu fuera de banda); el cron diario expira
+ * las que vencen y revierte `is_featured`.
+ *
+ * Invariante: máximo UNA sub `active` por (place_id, tier) — garantizado
+ * con índice único parcial `WHERE status = 'active'`. Renovaciones crean
+ * una sub nueva con `currentPeriodStart` igual al `currentPeriodEnd` viejo.
+ *
+ * Migration: `drizzle/2026-05-14-subscriptions.sql`.
+ */
+export const subscriptionTierEnum = ["featured"] as const;
+export type SubscriptionTier = (typeof subscriptionTierEnum)[number];
+
+export const subscriptionStatusEnum = ["active", "expired", "canceled"] as const;
+export type SubscriptionStatus = (typeof subscriptionStatusEnum)[number];
+
+export const subscriptionProviderEnum = ["manual", "khipu", "stripe"] as const;
+export type SubscriptionProvider = (typeof subscriptionProviderEnum)[number];
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    placeId: uuid("place_id")
+      .notNull()
+      .references(() => places.id, { onDelete: "cascade" }),
+    tier: text("tier", { enum: subscriptionTierEnum }).notNull(),
+    status: text("status", { enum: subscriptionStatusEnum })
+      .notNull()
+      .default("active"),
+    /** Monto cobrado en CLP (entero, sin decimales — el peso no los tiene). */
+    amountClp: integer("amount_clp").notNull(),
+    provider: text("provider", { enum: subscriptionProviderEnum })
+      .notNull()
+      .default("manual"),
+    /** ID externo del proveedor (Khipu payment, Stripe sub, etc). Null pa manual. */
+    externalId: text("external_id"),
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
+    /** Admin que creó la sub (responsable de la cobranza manual). */
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    /** Nota libre del admin (ej. "transferencia BancoEstado 2026-05-14"). */
+    notes: text("notes"),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    placeIdx: index("subscriptions_place_idx").on(table.placeId),
+    /**
+     * Cron de expiración: `WHERE status='active' AND current_period_end <= NOW()`.
+     * Sin este índice el cron hace seq scan completo a 1k+ subs.
+     */
+    statusEndIdx: index("subscriptions_status_end_idx").on(
+      table.status,
+      table.currentPeriodEnd,
+    ),
+    /**
+     * Invariante: máximo UNA active por (place, tier). Renovaciones requieren
+     * que la sub vieja ya esté `expired`/`canceled`. El cron + admin se
+     * encargan de transicionar el estado antes de crear la nueva.
+     */
+    activeUniqueIdx: uniqueIndex("subscriptions_active_place_tier_idx")
+      .on(table.placeId, table.tier)
+      .where(sql`status = 'active'`),
+  }),
+);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -617,6 +693,8 @@ export type DbNotification = typeof notifications.$inferSelect;
 export type NewDbNotification = typeof notifications.$inferInsert;
 export type DbFollow = typeof follows.$inferSelect;
 export type DbPushSubscription = typeof pushSubscriptions.$inferSelect;
+export type DbSubscription = typeof subscriptions.$inferSelect;
+export type NewDbSubscription = typeof subscriptions.$inferInsert;
 
 export type NewDbPlace = typeof places.$inferInsert;
 export type NewDbReview = typeof reviews.$inferInsert;

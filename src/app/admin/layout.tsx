@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { countPendingClaims } from "@/server/services/claims";
 import { countPendingPlaces } from "@/server/services/places";
+import { countActiveSubscriptions } from "@/server/services/subscriptions";
 
 import { AdminNav } from "./admin-nav";
 
@@ -22,9 +23,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   // Counts paralelos para badges de los tabs. No-op en modo demo (sin DB).
-  const [pendingCount, claimsCount] = await Promise.all([
+  const [pendingCount, claimsCount, activePromosCount] = await Promise.all([
     countPendingPlaces(),
     countPendingClaims(),
+    countActiveSubscriptions(),
   ]);
 
   return (
@@ -39,7 +41,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ← volver al sitio
         </Link>
       </header>
-      <AdminNav pendingCount={pendingCount} claimsCount={claimsCount} />
+      <AdminNav
+        pendingCount={pendingCount}
+        claimsCount={claimsCount}
+        activePromosCount={activePromosCount}
+      />
       {children}
     </div>
   );

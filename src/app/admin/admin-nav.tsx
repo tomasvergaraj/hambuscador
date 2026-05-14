@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 type AdminNavProps = {
   pendingCount: number;
   claimsCount: number;
+  activePromosCount: number;
 };
 
 type Tab = {
@@ -16,7 +17,11 @@ type Tab = {
   badge?: { count: number; tone: "mostaza" | "tomate"; aria: string } | null;
 };
 
-export function AdminNav({ pendingCount, claimsCount }: AdminNavProps) {
+export function AdminNav({
+  pendingCount,
+  claimsCount,
+  activePromosCount,
+}: AdminNavProps) {
   const pathname = usePathname();
 
   const tabs: Tab[] = [
@@ -41,6 +46,18 @@ export function AdminNav({ pendingCount, claimsCount }: AdminNavProps) {
               count: claimsCount,
               tone: "tomate",
               aria: `${claimsCount} ${claimsCount === 1 ? "claim" : "claims"}`,
+            }
+          : null,
+    },
+    {
+      href: "/admin/promociones",
+      label: "promos",
+      badge:
+        activePromosCount > 0
+          ? {
+              count: activePromosCount,
+              tone: "mostaza",
+              aria: `${activePromosCount} ${activePromosCount === 1 ? "activa" : "activas"}`,
             }
           : null,
     },
