@@ -197,7 +197,7 @@ export async function getTopPathsByCount(opts?: {
 /**
  * Cleanup de retention — borra mediciones anteriores a `days` (default 90).
  * Para que P75/P95 se mantengan baratos a la larga. Defensivo: floor de 7
- * (no podés borrar todo y dejar la tabla sin datos por accidente).
+ * (no puedes borrar todo y dejar la tabla sin datos por accidente).
  *
  * Returns count de filas borradas — útil para los logs del cron de mantenimiento.
  */

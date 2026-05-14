@@ -184,7 +184,7 @@ export const PICAS_LISTS: PicasList[] = [
     title: "gourmet sin pretensión",
     hook: "técnica fina, plato serio, sin ser fome",
     intro:
-      "wagyu, hongos confitados, brioche de la casa, salsas reducidas: estas picás juegan en la liga alta sin caer en el postureo. cuando querés una hamburguesa que sorprenda.",
+      "wagyu, hongos confitados, brioche de la casa, salsas reducidas: estas picás juegan en la liga alta sin caer en el postureo. cuando quieres una hamburguesa que sorprenda.",
     icon: "sparkles",
     maxItems: 10,
     criteria: {
@@ -219,7 +219,7 @@ export const PICAS_LISTS: PicasList[] = [
     title: "lo mejor de Ñuñoa",
     hook: "Plaza Ñuñoa, Irarrázaval y alrededores",
     intro:
-      "Ñuñoa tiene una identidad propia: picás de barrio con clientela fiel, smash artesanal, opciones veggie. estas son las que no podés saltarte si vivís por ahí.",
+      "Ñuñoa tiene una identidad propia: picás de barrio con clientela fiel, smash artesanal, opciones veggie. estas son las que no puedes saltarte si vives por ahí.",
     icon: "map-pin",
     maxItems: 12,
     criteria: { comunaSlug: "nunoa" },

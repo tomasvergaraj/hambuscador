@@ -125,7 +125,7 @@ export async function deletePicasList(slug: string): Promise<void> {
   await db.delete(picasLists).where(eq(picasLists.slug, slug));
 }
 
-/** Cuenta total de listas — útil pa badges del admin nav si querés. */
+/** Cuenta total de listas — útil pa badges del admin nav si quieres. */
 export async function countPicasLists(): Promise<number> {
   if (!isDbConfigured()) return PICAS_LISTS.length;
   const db = getDb();

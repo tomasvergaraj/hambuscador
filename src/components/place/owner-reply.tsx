@@ -76,7 +76,7 @@ export function OwnerReplyForm({ reviewId, placeId, initialText }: Props) {
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="respondé a esta reseña…"
+        placeholder="responde a esta reseña…"
         maxLength={500}
         rows={3}
         className="w-full bg-crema-deep border border-crema-edge rounded-md px-2 py-1.5 text-xs text-carbon placeholder:text-bronceado focus:outline-none focus:border-mostaza resize-none"

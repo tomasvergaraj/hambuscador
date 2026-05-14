@@ -31,7 +31,7 @@ export async function followUser(
   followeeId: string,
 ): Promise<void> {
   if (!isDbConfigured()) throw new Error("followUser requiere DATABASE_URL");
-  if (followerId === followeeId) throw new Error("no podés seguirte a ti mismo");
+  if (followerId === followeeId) throw new Error("no puedes seguirte a ti mismo");
 
   const db = getDb();
 

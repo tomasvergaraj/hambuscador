@@ -186,7 +186,7 @@ function buildDigestEmail(opts: {
   textParts.push(`Ver todo: ${notifsUrl}`);
   textParts.push("");
   textParts.push(
-    `Si querés cambiar la frecuencia o desactivarlo, entrá a ${profileUrl}.`,
+    `Si quieres cambiar la frecuencia o desactivarlo, entra a ${profileUrl}.`,
   );
   const text = textParts.join("\n");
 
@@ -285,7 +285,7 @@ function buildDigestEmail(opts: {
         <hr style="border:none; border-top:1px solid #E8DDD0; margin:28px 0 16px;" />
 
         <p style="margin:0; font-size:11px; color:#8B7355; line-height:1.5; text-align:center;">
-          recibís este resumen porque activaste digests ${frequency === "daily" ? "diarios" : "semanales"}.<br/>
+          recibes este resumen porque activaste digests ${frequency === "daily" ? "diarios" : "semanales"}.<br/>
           <a href="${profileUrl}" style="color:#8B7355;">cambiar frecuencia o desactivar</a>
         </p>
       </div>

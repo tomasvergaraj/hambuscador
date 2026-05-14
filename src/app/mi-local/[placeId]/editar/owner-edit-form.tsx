@@ -94,7 +94,7 @@ export function OwnerEditForm({
         <PhotoUploader value={photos} onChange={setPhotos} max={maxPhotos} />
         {!isPremium && (
           <p className="text-[11px] text-bronceado mt-1">
-            con tier premium subís hasta 15 fotos.
+            con tier premium subes hasta 15 fotos.
           </p>
         )}
         {photos.map((url, i) => (
