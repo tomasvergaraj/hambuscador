@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 
 import { getDb, isDbConfigured } from "@/server/db/client";
 import {
@@ -292,6 +292,26 @@ export async function syncPromotionsRegion(
     .update(promotions)
     .set({ regionLabel, updatedAt: new Date() })
     .where(eq(promotions.placeId, placeId));
+}
+
+/**
+ * Apaga la flag `is_active` en promociones vencidas (ends_at < now). Las
+ * deja en el histórico para auditoría — no se borran. Idempotente: solo
+ * toca las que aún tienen is_active=true.
+ *
+ * Devuelve el conteo. Llamado por el cron daily.
+ */
+export async function expireDuePromotions(): Promise<{ expired: number }> {
+  if (!isDbConfigured()) return { expired: 0 };
+  const db = getDb();
+  const result = await db
+    .update(promotions)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(
+      and(eq(promotions.isActive, true), lt(promotions.endsAt, new Date())),
+    )
+    .returning({ id: promotions.id });
+  return { expired: result.length };
 }
 
 /** Cuenta promos owner-created esperando moderación. Pa badge admin nav. */
