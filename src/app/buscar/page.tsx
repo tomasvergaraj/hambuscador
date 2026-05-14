@@ -1,4 +1,4 @@
-import { IconArrowLeft, IconList, IconMap } from "@tabler/icons-react";
+import { IconArrowLeft, IconList, IconMap, IconPlus } from "@tabler/icons-react";
 import { cookies } from "next/headers";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -210,6 +210,15 @@ export default async function BuscarPage({
             />
           </div>
         </div>
+
+        {/* FAB: agregar local — flotante arriba del botón locate-me. */}
+        <Link
+          href="/agregar"
+          aria-label="agregar local"
+          className="absolute right-3 bottom-40 z-10 inline-flex items-center justify-center w-11 h-11 rounded-full bg-mostaza text-carbon shadow-md border border-mostaza-deep/30 hover:bg-mostaza-deep transition-[transform,colors,box-shadow] duration-150 active:scale-90 hover:shadow-lg"
+        >
+          <IconPlus size={20} stroke={2} aria-hidden="true" />
+        </Link>
 
         <BottomNav />
       </div>
