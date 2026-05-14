@@ -47,7 +47,7 @@ export function BrandForm(props: Props) {
             name="slug"
             type="text"
             required
-            pattern="[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?"
+            pattern="[a-z0-9](?:[a-z0-9\-]{0,48}[a-z0-9])?"
             placeholder="burger-king"
             className="w-full bg-white border border-crema-edge rounded-md px-3 py-2 text-sm text-carbon focus:outline-none focus:border-mostaza"
           />
