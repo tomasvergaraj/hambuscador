@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { auth } from "@/server/auth";
+import { notifyCreatorOfPromotionDecision } from "@/server/services/promotion-notify";
 import {
   createPromotion,
   deletePromotion,
-  notifyCreatorOfPromotionDecision,
   updatePromotion,
 } from "@/server/services/promotions";
 

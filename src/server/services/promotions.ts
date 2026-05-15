@@ -8,7 +8,6 @@ import {
   type NewDbPromotion,
   type PromotionKind,
 } from "@/server/db/schema";
-import { createNotification } from "@/server/services/notifications";
 
 // ============================================================================
 // promotions service — promociones de contenido (% descuento, producto, combo).
@@ -329,73 +328,6 @@ export async function countPendingPromotions(): Promise<number> {
       ),
     );
   return row?.count ?? 0;
-}
-
-/**
- * Avisa al creador de una promo cuando admin la modera. Fire-and-forget:
- * el caller hace `.catch` así un fallo en la notif no rompe la moderación.
- *
- * Skip cases:
- * - promo no encontrada (admin race con delete).
- * - createdBy null (auto-creada por admin sin user attribution).
- * - createdBy === actorId (admin moderando promo que él mismo creó).
- */
-export async function notifyCreatorOfPromotionDecision(input: {
-  promoId: string;
-  decision: "approved" | "rejected";
-  actorId: string;
-  reason?: string | null;
-}): Promise<void> {
-  if (!isDbConfigured()) return;
-  const db = getDb();
-
-  const [row] = await db
-    .select({
-      promoId: promotions.id,
-      promoTitle: promotions.title,
-      createdBy: promotions.createdBy,
-      placeId: places.id,
-      placeName: places.name,
-      placeSlug: places.slug,
-      comunaSlug: places.comunaSlug,
-    })
-    .from(promotions)
-    .innerJoin(places, eq(places.id, promotions.placeId))
-    .where(eq(promotions.id, input.promoId))
-    .limit(1);
-
-  if (!row) return;
-  if (!row.createdBy) return;
-  if (row.createdBy === input.actorId) return;
-
-  if (input.decision === "approved") {
-    await createNotification({
-      userId: row.createdBy,
-      type: "promotion_approved",
-      payload: {
-        promoId: row.promoId,
-        promoTitle: row.promoTitle,
-        placeId: row.placeId,
-        placeName: row.placeName,
-        placeSlug: row.placeSlug,
-        comunaSlug: row.comunaSlug,
-      },
-    });
-    return;
-  }
-  await createNotification({
-    userId: row.createdBy,
-    type: "promotion_rejected",
-    payload: {
-      promoId: row.promoId,
-      promoTitle: row.promoTitle,
-      placeId: row.placeId,
-      placeName: row.placeName,
-      placeSlug: row.placeSlug,
-      comunaSlug: row.comunaSlug,
-      reason: input.reason ?? null,
-    },
-  });
 }
 
 export async function countActivePromotions(): Promise<number> {
