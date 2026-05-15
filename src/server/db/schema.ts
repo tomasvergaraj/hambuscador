@@ -433,12 +433,22 @@ export const searchLogs = pgTable(
  * - `review_on_owned_place`: `{ placeId, placeName, placeSlug, comunaSlug,
  *   reviewId, rating, reviewerName, reviewerImage, reviewerUsername, snippet }`
  * - `new_follower`: `{ followerId, followerName, followerImage, followerUsername }`
+ * - `promotion_approved`: `{ promoId, promoTitle, placeId, placeName, placeSlug,
+ *   comunaSlug }` — admin aprobó oferta owner-created.
+ * - `promotion_rejected`: `{ promoId, promoTitle, placeId, placeName, placeSlug,
+ *   comunaSlug, reason? }` — admin rechazó oferta owner-created.
  *
  * `read_at` null = sin leer; setea al abrir feed o markRead.
  *
- * Migration: drizzle/2026-05-12-notifications.sql
+ * Migration: drizzle/2026-05-12-notifications.sql (sin CHECK en DB — type es
+ * text libre; el enum es TS-only, no requiere migration al sumar variantes).
  */
-export const notificationTypeEnum = ["review_on_owned_place", "new_follower"] as const;
+export const notificationTypeEnum = [
+  "review_on_owned_place",
+  "new_follower",
+  "promotion_approved",
+  "promotion_rejected",
+] as const;
 export type NotificationType = (typeof notificationTypeEnum)[number];
 
 export const notifications = pgTable(

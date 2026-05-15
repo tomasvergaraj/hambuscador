@@ -1,4 +1,11 @@
-import { IconBell, IconStarFilled, IconUserPlus } from "@tabler/icons-react";
+import {
+  IconBell,
+  IconCheck,
+  IconStarFilled,
+  IconTag,
+  IconUserPlus,
+  IconX,
+} from "@tabler/icons-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -13,6 +20,8 @@ import {
   markAllNotificationsRead,
   type NewFollowerPayload,
   type NotificationItem,
+  type PromotionApprovedPayload,
+  type PromotionRejectedPayload,
   type ReviewOnOwnedPlacePayload,
 } from "@/server/services/notifications";
 
@@ -85,7 +94,89 @@ function renderNotification(n: NotificationItem) {
   if (n.type === "new_follower") {
     return <NewFollowerCard n={n as NotificationItem<"new_follower">} />;
   }
+  if (n.type === "promotion_approved") {
+    return <PromotionDecisionCard n={n as NotificationItem<"promotion_approved">} decision="approved" />;
+  }
+  if (n.type === "promotion_rejected") {
+    return <PromotionDecisionCard n={n as NotificationItem<"promotion_rejected">} decision="rejected" />;
+  }
   return null;
+}
+
+function PromotionDecisionCard({
+  n,
+  decision,
+}: {
+  n:
+    | NotificationItem<"promotion_approved">
+    | NotificationItem<"promotion_rejected">;
+  decision: "approved" | "rejected";
+}) {
+  const p = n.payload as PromotionApprovedPayload | PromotionRejectedPayload;
+  const unread = !n.readAt;
+  const isApproved = decision === "approved";
+  const reason = !isApproved ? (p as PromotionRejectedPayload).reason : null;
+
+  // Aprobada → link a la ficha pública (ya visible). Rechazada → al editor
+  // del local pa que el owner la corrija y re-envíe.
+  const href = isApproved
+    ? `/${p.comunaSlug}/${p.placeSlug}`
+    : `/mi-local/${p.placeId}/ofertas`;
+
+  const Icon = isApproved ? IconCheck : IconX;
+  const badgeClass = isApproved
+    ? "bg-lechuga text-crema"
+    : "bg-tomate text-crema";
+
+  return (
+    <Link
+      href={href}
+      className={[
+        "flex gap-3 rounded-lg p-3 border transition-[transform,colors,box-shadow] duration-150 active:scale-[0.98] hover:shadow-md",
+        unread
+          ? "bg-mostaza/10 border-mostaza/40 hover:bg-mostaza/15"
+          : "bg-crema-deep border-crema-edge hover:border-mostaza/40",
+      ].join(" ")}
+    >
+      <div className="relative shrink-0 mt-0.5">
+        <div className="w-9 h-9 rounded-full bg-mostaza/20 text-mostaza-deep flex items-center justify-center">
+          <IconTag size={16} stroke={2} />
+        </div>
+        <span
+          aria-hidden="true"
+          className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-crema-deep flex items-center justify-center ${badgeClass}`}
+        >
+          <Icon size={10} stroke={3} />
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-carbon leading-snug">
+          {isApproved ? (
+            <>
+              tu oferta{" "}
+              <span className="font-medium">«{p.promoTitle}»</span> fue
+              aprobada
+            </>
+          ) : (
+            <>
+              tu oferta{" "}
+              <span className="font-medium">«{p.promoTitle}»</span> fue
+              rechazada
+            </>
+          )}
+          <span className="text-bronceado"> · {p.placeName}</span>
+        </p>
+        {reason ? (
+          <p className="text-xs text-tinta-suave mt-1 leading-relaxed line-clamp-2">
+            «{reason}»
+          </p>
+        ) : null}
+        <p className="text-[10px] text-bronceado mt-1.5">
+          hace {timeAgo(n.createdAt)}
+        </p>
+      </div>
+    </Link>
+  );
 }
 
 function NewFollowerCard({ n }: { n: NotificationItem<"new_follower"> }) {

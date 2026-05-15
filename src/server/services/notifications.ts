@@ -33,9 +33,24 @@ export type NewFollowerPayload = {
   followerUsername: string | null;
 };
 
+export type PromotionApprovedPayload = {
+  promoId: string;
+  promoTitle: string;
+  placeId: string;
+  placeName: string;
+  placeSlug: string;
+  comunaSlug: string;
+};
+
+export type PromotionRejectedPayload = PromotionApprovedPayload & {
+  reason: string | null;
+};
+
 export type NotificationPayloadMap = {
   review_on_owned_place: ReviewOnOwnedPlacePayload;
   new_follower: NewFollowerPayload;
+  promotion_approved: PromotionApprovedPayload;
+  promotion_rejected: PromotionRejectedPayload;
 };
 
 export type NotificationItem<T extends NotificationType = NotificationType> = {
@@ -110,6 +125,24 @@ function buildPushPayload<T extends NotificationType>(
       body: p.followerUsername ? `@${p.followerUsername}` : "nuevo seguidor en hambuscador",
       url: p.followerUsername ? `/u/${p.followerUsername}` : "/perfil/notificaciones",
       tag: `follower:${p.followerId}`,
+    };
+  }
+  if (type === "promotion_approved") {
+    const p = payload as PromotionApprovedPayload;
+    return {
+      title: `oferta aprobada: ${p.promoTitle}`,
+      body: `ya es visible en ${p.placeName}`,
+      url: `/${p.comunaSlug}/${p.placeSlug}`,
+      tag: `promo-approved:${p.promoId}`,
+    };
+  }
+  if (type === "promotion_rejected") {
+    const p = payload as PromotionRejectedPayload;
+    return {
+      title: `oferta rechazada: ${p.promoTitle}`,
+      body: p.reason ?? `revísala y vuelve a enviarla desde tu local`,
+      url: `/mi-local/${p.placeId}/ofertas`,
+      tag: `promo-rejected:${p.promoId}`,
     };
   }
   // Fallback (no debería ocurrir — el enum cubre todos los casos).

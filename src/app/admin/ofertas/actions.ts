@@ -8,6 +8,7 @@ import { auth } from "@/server/auth";
 import {
   createPromotion,
   deletePromotion,
+  notifyCreatorOfPromotionDecision,
   updatePromotion,
 } from "@/server/services/promotions";
 
@@ -134,10 +135,17 @@ export async function deletePromotionAction(promoId: string) {
 
 /** Aprueba una promo pending. Pasa a visible en home + map + ficha. */
 export async function approvePromotionAction(formData: FormData) {
-  await requireAdmin();
+  const adminId = await requireAdmin();
   const id = formData.get("promoId");
   if (typeof id !== "string" || !id) throw new Error("promoId requerido");
   await updatePromotion(id, { moderationStatus: "approved" });
+  void notifyCreatorOfPromotionDecision({
+    promoId: id,
+    decision: "approved",
+    actorId: adminId,
+  }).catch((err) => {
+    console.error("[notifyCreatorOfPromotionDecision/approved]", err);
+  });
   revalidateTag("places");
   revalidatePath("/admin/ofertas");
   revalidatePath("/");
@@ -145,10 +153,23 @@ export async function approvePromotionAction(formData: FormData) {
 
 /** Rechaza una promo. Queda invisible al público; admin la ve en histórico. */
 export async function rejectPromotionAction(formData: FormData) {
-  await requireAdmin();
+  const adminId = await requireAdmin();
   const id = formData.get("promoId");
   if (typeof id !== "string" || !id) throw new Error("promoId requerido");
+  const rawReason = formData.get("reason");
+  const reason =
+    typeof rawReason === "string" && rawReason.trim().length > 0
+      ? rawReason.trim().slice(0, 280)
+      : null;
   await updatePromotion(id, { moderationStatus: "rejected" });
+  void notifyCreatorOfPromotionDecision({
+    promoId: id,
+    decision: "rejected",
+    actorId: adminId,
+    reason,
+  }).catch((err) => {
+    console.error("[notifyCreatorOfPromotionDecision/rejected]", err);
+  });
   revalidateTag("places");
   revalidatePath("/admin/ofertas");
   revalidatePath("/");

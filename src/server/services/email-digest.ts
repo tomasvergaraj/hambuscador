@@ -36,6 +36,8 @@ const SITE_URL =
 import type {
   NewFollowerPayload,
   NotificationPayloadMap,
+  PromotionApprovedPayload,
+  PromotionRejectedPayload,
   ReviewOnOwnedPlacePayload,
 } from "./notifications";
 
@@ -154,6 +156,8 @@ function buildDigestEmail(opts: {
   // Agrupar por tipo para que el email sea legible (no un wall lineal).
   const reviewNotifs = notifs.filter((n) => n.type === "review_on_owned_place");
   const followerNotifs = notifs.filter((n) => n.type === "new_follower");
+  const promoApproved = notifs.filter((n) => n.type === "promotion_approved");
+  const promoRejected = notifs.filter((n) => n.type === "promotion_rejected");
 
   // ── Text plain ────────────────────────────────────────────────────────────
   const textParts: string[] = [];
@@ -180,6 +184,23 @@ function buildDigestEmail(opts: {
       textParts.push(
         `  · ${p.followerName}${p.followerUsername ? ` (@${p.followerUsername})` : ""}`,
       );
+    }
+    textParts.push("");
+  }
+  if (promoApproved.length > 0) {
+    textParts.push(`Ofertas aprobadas (${promoApproved.length}):`);
+    for (const n of promoApproved) {
+      const p = n.payload as PromotionApprovedPayload;
+      textParts.push(`  · "${p.promoTitle}" en ${p.placeName}`);
+    }
+    textParts.push("");
+  }
+  if (promoRejected.length > 0) {
+    textParts.push(`Ofertas rechazadas (${promoRejected.length}):`);
+    for (const n of promoRejected) {
+      const p = n.payload as PromotionRejectedPayload;
+      textParts.push(`  · "${p.promoTitle}" en ${p.placeName}`);
+      if (p.reason) textParts.push(`    motivo: ${p.reason}`);
     }
     textParts.push("");
   }
@@ -211,6 +232,48 @@ function buildDigestEmail(opts: {
           }
           <p style="margin:0;">
             <a href="${reviewUrl}" style="font-size:12px; color:#8B7355; text-decoration:none;">leer reseña →</a>
+          </p>
+        </td>
+      </tr>
+    `;
+  };
+
+  const renderPromoApprovedItem = (n: DigestNotif) => {
+    const p = n.payload as PromotionApprovedPayload;
+    const placeUrl = `${SITE_URL}/${p.comunaSlug}/${p.placeSlug}`;
+    return `
+      <tr>
+        <td style="padding:10px 0; border-bottom:1px solid #E8DDD0;">
+          <p style="margin:0 0 4px; font-size:14px; color:#1F1B17;">
+            <span style="display:inline-block; background:#6B8E4E; color:#F5EFE6; font-size:10px; font-weight:700; letter-spacing:1px; padding:2px 6px; border-radius:4px; margin-right:6px; text-transform:uppercase;">aprobada</span>
+            <strong>"${escapeHtml(p.promoTitle)}"</strong>
+          </p>
+          <p style="margin:0; font-size:12px; color:#8B7355;">
+            ya es visible en
+            <a href="${placeUrl}" style="color:#8B7355; text-decoration:underline;">${escapeHtml(p.placeName)}</a>
+          </p>
+        </td>
+      </tr>
+    `;
+  };
+
+  const renderPromoRejectedItem = (n: DigestNotif) => {
+    const p = n.payload as PromotionRejectedPayload;
+    const ofertasUrl = `${SITE_URL}/mi-local/${p.placeId}/ofertas`;
+    return `
+      <tr>
+        <td style="padding:10px 0; border-bottom:1px solid #E8DDD0;">
+          <p style="margin:0 0 4px; font-size:14px; color:#1F1B17;">
+            <span style="display:inline-block; background:#C84B31; color:#F5EFE6; font-size:10px; font-weight:700; letter-spacing:1px; padding:2px 6px; border-radius:4px; margin-right:6px; text-transform:uppercase;">rechazada</span>
+            <strong>"${escapeHtml(p.promoTitle)}"</strong>
+          </p>
+          ${
+            p.reason
+              ? `<p style="margin:0 0 6px; font-size:13px; color:#2A2520; font-style:italic;">"${escapeHtml(p.reason)}"</p>`
+              : ""
+          }
+          <p style="margin:0;">
+            <a href="${ofertasUrl}" style="font-size:12px; color:#8B7355; text-decoration:none;">editar y reenviar →</a>
           </p>
         </td>
       </tr>
@@ -270,6 +333,36 @@ function buildDigestEmail(opts: {
         <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:20px;">
           <tbody>
             ${followerNotifs.map(renderFollowerItem).join("")}
+          </tbody>
+        </table>
+        `
+            : ""
+        }
+
+        ${
+          promoApproved.length > 0
+            ? `
+        <h2 style="margin:0 0 6px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:#8B7355; font-weight:600;">
+          ofertas aprobadas (${promoApproved.length})
+        </h2>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:20px;">
+          <tbody>
+            ${promoApproved.map(renderPromoApprovedItem).join("")}
+          </tbody>
+        </table>
+        `
+            : ""
+        }
+
+        ${
+          promoRejected.length > 0
+            ? `
+        <h2 style="margin:0 0 6px; font-size:14px; text-transform:uppercase; letter-spacing:1px; color:#8B7355; font-weight:600;">
+          ofertas rechazadas (${promoRejected.length})
+        </h2>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:20px;">
+          <tbody>
+            ${promoRejected.map(renderPromoRejectedItem).join("")}
           </tbody>
         </table>
         `
