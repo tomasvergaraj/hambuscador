@@ -1,18 +1,20 @@
 import {
   IconCheck,
+  IconClock,
   IconExternalLink,
   IconPencil,
   IconPercentage,
   IconPlus,
   IconStarFilled,
-  IconX,
 } from "@tabler/icons-react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { listPromotionsForAdmin } from "@/server/services/promotions";
 
-import { approvePromotionAction, rejectPromotionAction } from "./actions";
+import { approvePromotionAction } from "./actions";
+import { RejectPromoForm } from "./reject-promo-form";
 
 export const metadata = { title: "admin · ofertas" };
 export const dynamic = "force-dynamic";
@@ -22,6 +24,16 @@ function formatDate(d: Date | string): string {
     day: "2-digit",
     month: "short",
   }).format(new Date(d));
+}
+
+function formatEndsCountdown(d: Date | string): string {
+  const date = new Date(d);
+  const now = Date.now();
+  const days = Math.ceil((date.getTime() - now) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "vence hoy";
+  if (days === 1) return "vence mañana";
+  if (days <= 14) return `${days} días`;
+  return formatDate(date);
 }
 
 const KIND_ICON = {
@@ -87,65 +99,108 @@ export default async function AdminOfertasPage() {
           <h2 className="text-[11px] uppercase tracking-widest text-mostaza-deep font-medium mb-2">
             pendientes ({pending.length})
           </h2>
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-3">
             {pending.map((p) => {
               const Icon = KIND_ICON[p.kind] ?? IconStarFilled;
+              const isDiscount =
+                p.kind === "percent_discount" && !!p.discountPct;
               return (
                 <li
                   key={p.id}
-                  className="bg-mostaza/5 border border-mostaza/40 rounded-xl p-3 flex flex-col gap-3"
+                  className="bg-mostaza/5 border border-mostaza/40 rounded-xl overflow-hidden flex flex-col"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 shrink-0 rounded-md bg-mostaza/20 text-mostaza-deep flex items-center justify-center">
-                      <Icon size={16} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-display font-semibold text-sm text-carbon">
-                        {p.title}
-                      </h3>
-                      <p className="text-[11px] text-bronceado mt-0.5">
-                        {p.placeName} · {p.comunaLabel} ·{" "}
-                        {p.kind === "percent_discount" && p.discountPct
-                          ? `${p.discountPct}%`
-                          : KIND_LABEL[p.kind]}{" "}
-                        · hasta {formatDate(p.endsAt)}
-                      </p>
-                      {p.description && (
-                        <p className="text-[11px] text-carbon mt-1 leading-relaxed line-clamp-3">
-                          {p.description}
-                        </p>
-                      )}
-                    </div>
-                    <Link
-                      href={`/${p.comunaSlug}/${p.placeSlug}`}
-                      target="_blank"
-                      rel="noopener"
-                      aria-label="ver ficha"
-                      className="text-bronceado hover:text-carbon shrink-0"
-                    >
-                      <IconExternalLink size={14} />
-                    </Link>
+                  {/* Hero preview — replica del look público (PromoCard) pa que
+                      el admin vea exactamente lo que el usuario va a ver. */}
+                  <div className="relative h-32 bg-tomate/10 flex items-center justify-center">
+                    {p.photoUrl ? (
+                      <Image
+                        src={p.photoUrl}
+                        alt={p.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 768px"
+                        className="object-cover"
+                        quality={70}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-tomate/15 to-mostaza/10">
+                        {isDiscount ? (
+                          <span className="font-display font-bold text-5xl text-tomate">
+                            -{p.discountPct}%
+                          </span>
+                        ) : (
+                          <IconPercentage size={48} className="text-tomate" />
+                        )}
+                      </div>
+                    )}
+                    {isDiscount && p.photoUrl && (
+                      <span className="absolute top-2 left-2 bg-tomate text-crema-deep font-display font-bold text-sm px-2 py-1 rounded-md">
+                        -{p.discountPct}%
+                      </span>
+                    )}
+                    <span className="absolute top-2 right-2 bg-carbon/80 text-crema text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded backdrop-blur-sm">
+                      {KIND_LABEL[p.kind]}
+                    </span>
+                    <span className="absolute bottom-2 right-2 bg-carbon/80 text-crema text-[10px] font-medium px-1.5 py-0.5 rounded backdrop-blur-sm inline-flex items-center gap-0.5">
+                      <IconClock size={10} />
+                      {formatEndsCountdown(p.endsAt)}
+                    </span>
                   </div>
-                  <div className="flex gap-2 items-center">
-                    <form action={rejectPromotionAction} className="flex-1">
-                      <input type="hidden" name="promoId" value={p.id} />
-                      <Button variant="secondary" size="sm" fullWidth type="submit">
-                        <IconX size={13} aria-hidden="true" /> rechazar
-                      </Button>
-                    </form>
-                    <form action={approvePromotionAction} className="flex-[2]">
-                      <input type="hidden" name="promoId" value={p.id} />
-                      <Button variant="primary" size="sm" fullWidth type="submit">
-                        <IconCheck size={13} aria-hidden="true" /> aprobar
-                      </Button>
-                    </form>
-                    <Link
-                      href={`/admin/ofertas/${p.id}`}
-                      aria-label="editar"
-                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-bronceado hover:bg-mostaza/15 hover:text-carbon transition-colors"
-                    >
-                      <IconPencil size={14} />
-                    </Link>
+
+                  <div className="p-3 flex flex-col gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 shrink-0 rounded-md bg-mostaza/20 text-mostaza-deep flex items-center justify-center">
+                        <Icon size={14} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-display font-semibold text-sm text-carbon">
+                          {p.title}
+                        </h3>
+                        <p className="text-[11px] text-bronceado mt-0.5">
+                          {p.placeName} · {p.comunaLabel} · hasta{" "}
+                          {formatDate(p.endsAt)}
+                        </p>
+                        {p.description && (
+                          <p className="text-[11px] text-carbon mt-1 leading-relaxed line-clamp-3">
+                            {p.description}
+                          </p>
+                        )}
+                      </div>
+                      <Link
+                        href={`/${p.comunaSlug}/${p.placeSlug}`}
+                        target="_blank"
+                        rel="noopener"
+                        aria-label="ver ficha"
+                        className="text-bronceado hover:text-carbon shrink-0"
+                      >
+                        <IconExternalLink size={14} />
+                      </Link>
+                    </div>
+                    <div className="flex gap-2 items-stretch">
+                      <div className="flex-1">
+                        <RejectPromoForm promoId={p.id} />
+                      </div>
+                      <form
+                        action={approvePromotionAction}
+                        className="flex-[2]"
+                      >
+                        <input type="hidden" name="promoId" value={p.id} />
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          fullWidth
+                          type="submit"
+                        >
+                          <IconCheck size={13} aria-hidden="true" /> aprobar
+                        </Button>
+                      </form>
+                      <Link
+                        href={`/admin/ofertas/${p.id}`}
+                        aria-label="editar"
+                        className="w-9 inline-flex items-center justify-center rounded-md text-bronceado hover:bg-mostaza/15 hover:text-carbon transition-colors"
+                      >
+                        <IconPencil size={14} />
+                      </Link>
+                    </div>
                   </div>
                 </li>
               );
@@ -166,25 +221,48 @@ export default async function AdminOfertasPage() {
           <ul className="flex flex-col gap-2">
             {active.map((p) => {
               const Icon = KIND_ICON[p.kind] ?? IconStarFilled;
+              const isDiscount =
+                p.kind === "percent_discount" && !!p.discountPct;
               return (
-                <li key={p.id}>
-                  <Link
-                    href={`/admin/ofertas/${p.id}`}
-                    className="bg-white border border-crema-edge rounded-xl p-3 flex items-center gap-3 hover:border-mostaza transition-colors"
-                  >
-                    <div className="w-10 h-10 shrink-0 rounded-md bg-tomate/15 text-tomate flex items-center justify-center">
-                      <Icon size={16} />
+                <li key={p.id} className="relative">
+                  {/* Stretched-link pattern pa que el thumb + meta sean
+                      clickeables al editor, sin anidar <a><a> con el link
+                      "ver ficha" de la derecha. */}
+                  <div className="bg-white border border-crema-edge rounded-xl p-2 flex items-center gap-3 hover:border-mostaza transition-colors">
+                    <div className="w-14 h-14 shrink-0 rounded-md overflow-hidden relative bg-tomate/10">
+                      {p.photoUrl ? (
+                        <Image
+                          src={p.photoUrl}
+                          alt=""
+                          fill
+                          sizes="56px"
+                          className="object-cover"
+                          quality={60}
+                        />
+                      ) : isDiscount ? (
+                        <span className="absolute inset-0 flex items-center justify-center font-display font-bold text-sm text-tomate">
+                          -{p.discountPct}%
+                        </span>
+                      ) : (
+                        <Icon
+                          size={18}
+                          className="absolute inset-0 m-auto text-tomate"
+                        />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-display font-semibold text-sm text-carbon truncate">
+                      <Link
+                        href={`/admin/ofertas/${p.id}`}
+                        className="font-display font-semibold text-sm text-carbon truncate block before:absolute before:inset-0 before:content-[''] before:rounded-xl"
+                      >
                         {p.title}
-                      </h3>
+                      </Link>
                       <p className="text-[11px] text-bronceado truncate">
                         {p.placeName} · {p.comunaLabel} ·{" "}
-                        {p.kind === "percent_discount" && p.discountPct
+                        {isDiscount
                           ? `${p.discountPct}%`
                           : KIND_LABEL[p.kind]}{" "}
-                        · hasta {formatDate(p.endsAt)}
+                        · {formatEndsCountdown(p.endsAt)}
                       </p>
                     </div>
                     <Link
@@ -192,11 +270,11 @@ export default async function AdminOfertasPage() {
                       target="_blank"
                       rel="noopener"
                       aria-label="ver ficha"
-                      className="text-bronceado hover:text-carbon shrink-0"
+                      className="text-bronceado hover:text-carbon shrink-0 relative z-10"
                     >
                       <IconExternalLink size={14} />
                     </Link>
-                  </Link>
+                  </div>
                 </li>
               );
             })}
