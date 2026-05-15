@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/brand/logo";
 
@@ -29,20 +28,24 @@ export type HeaderProps = {
    */
   avatarImage?: string | null;
   /**
-   * Si está seteado, el botón "atrás" navega a esta ruta en vez de hacer
-   * `router.back()`. Útil para páginas-destino (tabs como /picas, /perfil)
-   * donde el usuario espera volver a inicio, no a la página de origen.
-   * Cuando se pasa, el header se renderiza 100% en el server (sin JS).
+   * Ruta de fallback cuando NO hay historial de navegación en el tab (entrada
+   * directa por deeplink, share, push notif). El comportamiento default del
+   * back button es `router.back()` — vuelve a la página real desde donde el
+   * user llegó, sin necesidad de que esta page la conozca. Sin historial
+   * cae a esta ruta para no dejar al user encerrado.
+   *
+   * Antes este prop forzaba el back siempre a una ruta fija; ahora es solo
+   * fallback. Páginas-destino (tabs /picas, /perfil) suelen pasar "/" acá.
    */
   backHref?: string;
 };
 
 /**
- * Header universal — server component. Tres modos:
+ * Header universal. Tres modos:
  * - `<Header />` o `<Header avatarInitials="JM" />` → logo + (avatar | iniciar sesión)
- * - `<Header title="..." />` → back arrow + título (BackButton client island)
- * - `<Header title="..." backHref="/" />` → back link + título (puro server)
- * - `<Header title="..." isModal />` → X + título (BackButton client island)
+ * - `<Header title="..." />` → back button + título (router.back si hay historial)
+ * - `<Header title="..." backHref="/" />` → back button con fallback a `/` si no hay historial
+ * - `<Header title="..." isModal />` → X + título
  */
 export function Header({
   title,
@@ -53,20 +56,9 @@ export function Header({
   backHref,
 }: HeaderProps) {
   if (title) {
-    const Icon = isModal ? IconX : IconArrowLeft;
-    const ariaLabel = isModal ? "Cerrar" : "Volver";
-    const buttonClass =
-      "w-8 h-8 -ml-1 flex items-center justify-center text-carbon hover:bg-crema-deep rounded-full transition-[transform,colors] duration-150 active:scale-90";
-
     return (
       <header className="flex items-center px-4 pt-3.5 pb-2">
-        {backHref ? (
-          <Link href={backHref} aria-label={ariaLabel} className={buttonClass}>
-            <Icon size={20} stroke={1.75} />
-          </Link>
-        ) : (
-          <BackButton isModal={isModal} />
-        )}
+        <BackButton isModal={isModal} fallbackHref={backHref} />
         <div className="flex-1 text-center">
           <h1 className="font-display font-semibold text-base text-carbon leading-tight">
             {title}
